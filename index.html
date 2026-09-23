@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BRP Character Generator</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<header class="app-header">
+  <h1>Basic Roleplaying &mdash; Character Generator</h1>
+  <p class="subtitle">Unofficial character generator for Chaosium's Basic Roleplaying (BRP) Universal Game Engine.</p>
+</header>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="panel">
+      <h2>Saved Characters</h2>
+      <p id="storage-warning" class="storage-warning" hidden>
+        ⚠ Browser storage isn't available in this context, so saved characters will only last until you close or reload this page. Use <strong>Export JSON</strong> on a character to keep a permanent copy.
+      </p>
+      <button id="btn-new-character" class="btn btn-secondary btn-block">+ New Character</button>
+      <ul id="saved-character-list" class="saved-list"></ul>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <section class="panel" id="settings-panel">
+      <h2>
+        Optional Rules &amp; Settings
+        <button id="toggle-settings" class="btn-link" type="button">hide</button>
+      </h2>
+      <div id="settings-body" class="settings-grid">
+
+        <div class="setting-group">
+          <label for="opt-campaign-level">Campaign Power Level</label>
+          <select id="opt-campaign-level">
+            <option value="Normal">Normal</option>
+            <option value="Heroic">Heroic</option>
+            <option value="Epic">Epic</option>
+            <option value="Superhuman">Superhuman</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="opt-char-method">Characteristic Generation</label>
+          <select id="opt-char-method">
+            <option value="standard">Standard (3D6 / 2D6+6, redistribute 3)</option>
+            <option value="chooseRolls">Choosing Characteristic Values (7x 3D6, assign)</option>
+            <option value="higherStart">Higher Starting Characteristics (2D6+6 all)</option>
+            <option value="pointBuy">Point-based Character Creation</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="opt-profession">Profession</label>
+          <select id="opt-profession">
+            <option value="">Random</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="opt-age">Age (blank = random 17+1D6)</label>
+          <input type="number" id="opt-age" min="1" max="120" placeholder="random" />
+        </div>
+
+        <div class="setting-group">
+          <label for="opt-name">Name</label>
+          <input type="text" id="opt-name" placeholder="(optional)" />
+        </div>
+
+        <div class="setting-group">
+          <label for="opt-gender">Gender</label>
+          <input type="text" id="opt-gender" placeholder="(optional)" />
+        </div>
+
+        <fieldset class="setting-toggles">
+          <legend>Optional rule toggles</legend>
+
+          <label class="toggle"><input type="checkbox" id="opt-edu" /> Education (EDU) characteristic</label>
+          <label class="toggle"><input type="checkbox" id="opt-age-modifiers" checked /> Apply age-based skill point / characteristic modifiers</label>
+
+          <label class="toggle"><input type="checkbox" id="opt-category-bonus" /> Skill Category Bonuses</label>
+          <div class="sub-setting" id="category-bonus-sub">
+            <label><input type="radio" name="opt-category-method" value="full" checked /> Full method</label>
+            <label><input type="radio" name="opt-category-method" value="simple" /> Simpler method (1/2 primary)</label>
+          </div>
+
+          <label class="toggle"><input type="checkbox" id="opt-increased-personal" /> Increased Personal Skill Points</label>
+          <label class="toggle"><input type="checkbox" id="opt-personality" checked /> Personality Type (Step Six)</label>
+          <label class="toggle"><input type="checkbox" id="opt-distinctive-features" /> Distinctive Features (Step Nine)</label>
+
+          <label class="toggle"><input type="checkbox" id="opt-total-hp" /> Total Hit Points (CON+SIZ, no halving)</label>
+          <label class="toggle"><input type="checkbox" id="opt-hit-location" /> Hit Points per Hit Location</label>
+          <label class="toggle"><input type="checkbox" id="opt-fatigue" /> Fatigue Points</label>
+          <label class="toggle"><input type="checkbox" id="opt-sanity" /> Sanity Points</label>
+
+          <label class="toggle"><input type="checkbox" id="opt-powers" /> Powers (Step Two) &mdash; groundwork only</label>
+        </fieldset>
+
+      </div>
+    </section>
+
+    <section class="panel generate-panel">
+      <button id="btn-generate" class="btn btn-primary btn-large">🎲 Generate Random Character</button>
+      <p class="hint">Rolls characteristics, picks (or uses your chosen) profession, resolves all "choose N of the following" skill picks, allocates skill points, and applies every optional rule enabled above.</p>
+    </section>
+
+    <section class="panel" id="sheet-panel" hidden>
+      <div class="sheet-toolbar">
+        <button id="btn-regenerate" class="btn btn-small" title="Regenerate this character from the current settings">🎲 Regenerate</button>
+        <span class="spacer"></span>
+        <button id="btn-save" class="btn btn-small btn-secondary">💾 Save</button>
+        <button id="btn-export-json" class="btn btn-small">Export JSON</button>
+        <button id="btn-export-md" class="btn btn-small">Export Markdown</button>
+        <button id="btn-export-pdf" class="btn btn-small">Export PDF</button>
+      </div>
+      <div id="character-sheet"></div>
+    </section>
+  </main>
+</div>
+
+<footer class="app-footer">
+  <p>Unofficial fan tool. Basic Roleplaying is a registered trademark of Moon Design Publications; rules content adapted from the BRP Universal Game Engine rulebook for personal use.</p>
+</footer>
+
+<script src="js/lib/jspdf.umd.min.js"></script>
+<script src="js/dist/bundle.js"></script>
+</body>
+</html>
