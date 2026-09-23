@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { choosePowerSetOption, assignPowerTypes, buildPowersBlock } from "../js/engine/powersEngine.js";
+import { choosePowerSetOption, assignPowerTypes, buildPowersBlock, flattenPowerSetOption, buildPowersBlockManual } from "../js/engine/powersEngine.js";
 import { POWER_TYPES } from "../js/data/powers.js";
 
 test("choosePowerSetOption returns a valid option for each campaign level", () => {
@@ -35,4 +35,23 @@ test("buildPowersBlock sets powerPoints to the given POW value", () => {
   const block = buildPowersBlock("Normal", 17);
   assert.equal(block.powerPoints, 17);
   assert.ok(Array.isArray(block.sets));
+});
+
+test("flattenPowerSetOption expands each {level,count} entry into one slot per count", () => {
+  const slots = flattenPowerSetOption([{ level: "Heroic", count: 1 }, { level: "Normal", count: 2 }]);
+  assert.deepEqual(slots, [{ level: "Heroic" }, { level: "Normal" }, { level: "Normal" }]);
+});
+
+test("buildPowersBlockManual builds sets from the player's own type choices", () => {
+  const block = buildPowersBlockManual(15, [{ level: "Heroic", typeId: "magic" }, { level: "Normal", typeId: "sorcery" }]);
+  assert.equal(block.powerPoints, 15);
+  assert.equal(block.sets.length, 2);
+  assert.equal(block.sets[0].name, "Magic");
+  assert.equal(block.sets[0].level, "Heroic");
+  assert.equal(block.sets[1].name, "Sorcery");
+  assert.deepEqual(block.sets[0].spells, []);
+});
+
+test("buildPowersBlockManual throws on an unknown power type id", () => {
+  assert.throws(() => buildPowersBlockManual(10, [{ level: "Normal", typeId: "telekinesis" }]));
 });

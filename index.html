@@ -102,8 +102,27 @@
     </section>
 
     <section class="panel generate-panel">
-      <button id="btn-generate" class="btn btn-primary btn-large">🎲 Generate Random Character</button>
-      <p class="hint">Rolls characteristics, picks (or uses your chosen) profession, resolves all "choose N of the following" skill picks, allocates skill points, and applies every optional rule enabled above.</p>
+      <div class="generate-choices">
+        <button id="btn-generate" class="btn btn-primary btn-large">🎲 Quick Random Generate</button>
+        <button id="btn-start-wizard" class="btn btn-large">🛠 Build Step-by-Step</button>
+      </div>
+      <p class="hint">Quick Random rolls and resolves everything at once. Build Step-by-Step walks through characteristics, profession &amp; skills, personality, and every other choice one at a time, with a "Randomize this step" shortcut on each &mdash; both use the optional rules and campaign level set above.</p>
+    </section>
+
+    <section class="panel" id="wizard-panel" hidden>
+      <div class="wizard-header">
+        <div id="wizard-progress" class="wizard-progress"></div>
+        <button id="btn-wizard-cancel" class="btn-link" type="button">cancel</button>
+      </div>
+      <h2 id="wizard-step-title"></h2>
+      <div id="wizard-step-body" class="wizard-step-body"></div>
+      <p id="wizard-error" class="wizard-error" hidden></p>
+      <div class="wizard-nav">
+        <button id="btn-wizard-back" class="btn">&larr; Back</button>
+        <button id="btn-wizard-randomize" class="btn btn-secondary">🎲 Randomize this step</button>
+        <span class="spacer"></span>
+        <button id="btn-wizard-next" class="btn btn-primary">Next &rarr;</button>
+      </div>
     </section>
 
     <section class="panel" id="sheet-panel" hidden>

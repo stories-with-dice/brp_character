@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rollStartingAge, ageModifiers, DEFAULT_MIN_AGE } from "../js/engine/age.js";
+import { rollStartingAge, ageModifiers, DEFAULT_MIN_AGE, applyCharacteristicReductions } from "../js/engine/age.js";
 
 test("rollStartingAge is bounded 18-23 (17+1D6)", () => {
   for (let i = 0; i < 200; i++) {
@@ -32,4 +32,34 @@ test("ageModifiers applies a characteristic penalty at 50+ and a larger one at 8
   assert.equal(ageModifiers(55, "Normal").characteristicPenalties, 1);
   assert.equal(ageModifiers(85, "Normal").characteristicPenalties, 3);
   assert.equal(ageModifiers(49, "Normal").characteristicPenalties, 0);
+});
+
+test("applyCharacteristicReductions subtracts 1 from each named characteristic", () => {
+  const chars = { STR: 12, CON: 12, DEX: 12, CHA: 12 };
+  const result = applyCharacteristicReductions(chars, ["STR", "CHA"]);
+  assert.equal(result.STR, 11);
+  assert.equal(result.CHA, 11);
+  assert.equal(result.CON, 12);
+});
+
+test("applyCharacteristicReductions allows the same characteristic to be picked more than once", () => {
+  const chars = { STR: 12 };
+  const result = applyCharacteristicReductions(chars, ["STR", "STR", "STR"]);
+  assert.equal(result.STR, 9);
+});
+
+test("applyCharacteristicReductions does not mutate the input", () => {
+  const chars = { STR: 12 };
+  applyCharacteristicReductions(chars, ["STR"]);
+  assert.equal(chars.STR, 12);
+});
+
+test("applyCharacteristicReductions clamps at the given minimum", () => {
+  const chars = { STR: 2 };
+  const result = applyCharacteristicReductions(chars, ["STR", "STR"], { min: 1 });
+  assert.equal(result.STR, 1);
+});
+
+test("applyCharacteristicReductions throws on an unknown characteristic", () => {
+  assert.throws(() => applyCharacteristicReductions({ STR: 10 }, ["XYZ"]));
 });

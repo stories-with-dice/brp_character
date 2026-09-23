@@ -1,8 +1,8 @@
 import { PROFESSIONS, findProfession } from "../data/professions.js";
-import { CHARACTERISTICS, GENERATION_METHODS, characteristicRolls } from "./characteristics.js";
+import { CHARACTERISTICS, GENERATION_METHODS } from "./characteristics.js";
 import { generateCharacteristics } from "./characteristicsRandom.js";
 import { computeDerived } from "./derived.js";
-import { rollStartingAge, ageModifiers, DEFAULT_MIN_AGE } from "./age.js";
+import { rollStartingAge, ageModifiers, applyCharacteristicReductions, DEFAULT_MIN_AGE, OLD_AGE_PENALTY_CHARACTERISTICS } from "./age.js";
 import { resolveProfessionSkills, allocatePointsRandomly } from "./professionSkills.js";
 import { baselineSkillEntries, ensureSkillEntry, currentTotalBeforePoints, skillTotal } from "./skillSheet.js";
 import { professionalSkillPointPool, personalSkillPointPool, professionalSkillCap, personalSkillCap } from "./skillPoints.js";
@@ -13,6 +13,7 @@ import { pickWealthLevel } from "./wealth.js";
 import { SKILLS } from "../data/skills.js";
 import { resolveSkillDisplayName } from "./skillRef.js";
 import { roll2d6plus6 } from "./dice.js";
+import { assembleCharacter } from "./characterAssembly.js";
 
 /** @typedef {object} GenerationOptions
  * @property {'Normal'|'Heroic'|'Epic'|'Superhuman'} campaignPowerLevel
@@ -94,16 +95,16 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
   if (options.useAgeModifiers) {
     const mods = ageModifiers(age, level, { minAge: DEFAULT_MIN_AGE });
     skillPointModifier = mods.skillPointModifier;
-    const pool = ["STR", "CON", "DEX", "CHA"];
+    const oldPenaltyPicks = [];
     for (let i = 0; i < mods.characteristicPenalties; i++) {
-      const key = pool[Math.floor(rng() * pool.length)];
-      chars[key] = Math.max(1, chars[key] - 1);
+      oldPenaltyPicks.push(OLD_AGE_PENALTY_CHARACTERISTICS[Math.floor(rng() * OLD_AGE_PENALTY_CHARACTERISTICS.length)]);
     }
+    const youngPenaltyPicks = [];
+    const eligible = CHARACTERISTICS.filter((c) => c !== "EDU");
     for (let i = 0; i < mods.youngCharacteristicPenalty; i++) {
-      const eligible = CHARACTERISTICS.filter((c) => c !== "EDU");
-      const key = eligible[Math.floor(rng() * eligible.length)];
-      chars[key] = Math.max(1, chars[key] - 1);
+      youngPenaltyPicks.push(eligible[Math.floor(rng() * eligible.length)]);
     }
+    chars = applyCharacteristicReductions(chars, [...oldPenaltyPicks, ...youngPenaltyPicks]);
   }
 
   // Step Five: Derived Characteristics
@@ -168,16 +169,15 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
 
   const wealth = pickWealthLevel(profession.wealth, rng);
 
-  return {
-    name: options.name || "",
-    gender: options.gender || "",
+  return assembleCharacter({
+    name: options.name,
+    gender: options.gender,
     age,
-    profession: profession.name,
+    professionName: profession.name,
     professionDescription: profession.description,
     wealth,
-    special: profession.special ?? null,
+    special: profession.special,
     characteristics: chars,
-    characteristicRolls: characteristicRolls(chars),
     derived,
     skills: entries,
     personality,
@@ -186,5 +186,5 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
     professionalSkillPointPool: professionalPool,
     personalSkillPointPool: personalPool,
     options,
-  };
+  });
 }

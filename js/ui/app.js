@@ -3,6 +3,7 @@ import { PROFESSIONS } from "../data/professions.js";
 import { renderCharacterSheet } from "./render.js";
 import { loadAllCharacters, saveCharacter, deleteCharacter, newCharacterId, isStoragePersistent } from "./storage.js";
 import { exportToJson, exportToMarkdown, exportToPdf } from "./export.js";
+import { startWizard } from "./wizard.js";
 
 let currentCharacter = null;
 
@@ -92,12 +93,30 @@ function renderSavedList() {
   }
 }
 
+function startWizardFlow() {
+  $("sheet-panel").hidden = true;
+  $("wizard-panel").hidden = false;
+  startWizard(readOptionsFromForm(), {
+    onFinish: (character) => {
+      if (!character._id) character._id = newCharacterId();
+      $("wizard-panel").hidden = true;
+      showSheet(character);
+    },
+    onCancel: () => {
+      $("wizard-panel").hidden = true;
+    },
+  });
+  $("wizard-panel").scrollIntoView?.({ behavior: "smooth", block: "start" });
+}
+
 function wireEvents() {
   $("btn-generate").addEventListener("click", generate);
   $("btn-regenerate").addEventListener("click", generate);
+  $("btn-start-wizard").addEventListener("click", startWizardFlow);
 
   $("btn-new-character").addEventListener("click", () => {
     $("sheet-panel").hidden = true;
+    $("wizard-panel").hidden = true;
     currentCharacter = null;
     $("opt-name").value = "";
     $("opt-gender").value = "";

@@ -14,10 +14,32 @@ export function parseSkillRef(ref) {
   return { base: base.trim(), specialty: specialty.trim() };
 }
 
-function specialtyPoolFor(base) {
-  if (WEAPON_CLASSES[base]) return WEAPON_CLASSES[base];
-  if (OPEN_SPECIALTY_SKILLS[base]) return OPEN_SPECIALTY_SKILLS[base];
+/** The list of concrete specialty names offered for a base skill (weapon
+ * class or open specialty list), or null if that skill has no specialty
+ * system / isn't found. Used to populate specialty pickers in the UI. */
+export function specialtyOptionsFor(base) {
+  const skillDef = findSkill(base);
+  const key = skillDef?.specialtyKey ?? base;
+  if (WEAPON_CLASSES[key]) return WEAPON_CLASSES[key];
+  if (OPEN_SPECIALTY_SKILLS[key]) return OPEN_SPECIALTY_SKILLS[key];
   return null;
+}
+
+function isOpenSpecialtyText(specialty) {
+  return specialty == null || /^any$/i.test(specialty) || /^various$/i.test(specialty);
+}
+
+/** True if this ref needs a concrete specialty chosen before it can be added
+ * to a character sheet (i.e. it says "(any)"/"(various)"/nothing but the
+ * base skill has a specialty system with concrete options). */
+export function refNeedsSpecialtyChoice(ref) {
+  const { base, specialty, wildcard } = parseSkillRef(ref);
+  if (wildcard) return false;
+  const skillDef = findSkill(base);
+  if (!skillDef?.specialty) return false;
+  if (!isOpenSpecialtyText(specialty)) return false;
+  const options = specialtyOptionsFor(base);
+  return Boolean(options && options.length > 0);
 }
 
 /** Resolve "any"/"various" specialties to a concrete choice; leaves specific
@@ -31,13 +53,26 @@ export function resolveSkillDisplayName(ref, rng = Math.random) {
 
   if (!skillDef.specialty) return base; // no specialty system for this skill
 
-  const isOpenChoice = specialty == null || /^any$/i.test(specialty) || /^various$/i.test(specialty);
-  if (!isOpenChoice) return `${base} (${specialty})`;
+  if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
 
-  const pool = specialtyPoolFor(skillDef.specialtyKey ?? base);
+  const pool = specialtyOptionsFor(base);
   if (!pool || pool.length === 0) return base;
   const pick = pool[Math.floor(rng() * pool.length)];
   return `${base} (${pick})`;
+}
+
+/** Manually resolve a ref given an explicit specialty choice (from a UI
+ * picker), instead of rolling one. `chosenSpecialty` is ignored for refs
+ * that already have a concrete specialty or no specialty system. */
+export function resolveSkillDisplayNameManual(ref, chosenSpecialty) {
+  const { base, specialty, wildcard } = parseSkillRef(ref);
+  if (wildcard) return null;
+  const skillDef = findSkill(base);
+  if (!skillDef) return ref;
+  if (!skillDef.specialty) return base;
+  if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
+  if (!chosenSpecialty) return null; // caller must supply a choice for open specialties
+  return `${base} (${chosenSpecialty})`;
 }
 
 export function baseSkillName(displayName) {

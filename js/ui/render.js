@@ -3,7 +3,7 @@ import { SKILL_CATEGORIES } from "../data/skills.js";
 
 const ROLL_LABELS = { STR: "Effort", CON: "Stamina", INT: "Idea", POW: "Luck", DEX: "Agility", CHA: "Charm", EDU: "Knowledge" };
 
-function el(tag, attrs = {}, children = []) {
+export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "text") node.textContent = v;
@@ -12,7 +12,8 @@ function el(tag, attrs = {}, children = []) {
     else node.setAttribute(k, v);
   }
   for (const child of [].concat(children)) {
-    if (child) node.appendChild(child);
+    if (child == null || child === false) continue;
+    node.appendChild(typeof child === "string" || typeof child === "number" ? document.createTextNode(String(child)) : child);
   }
   return node;
 }
@@ -119,6 +120,16 @@ function powersCard(character) {
   ]);
 }
 
+function backgroundCard(character) {
+  const { description, background, possessionsNotes } = character;
+  if (!description && !background && !possessionsNotes) return null;
+  const card = el("div", { class: "card" }, [el("h3", { text: "Background & Possessions" })]);
+  if (description) card.appendChild(el("p", { text: description, style: "font-size:0.85rem; margin-bottom:6px;" }));
+  if (background) card.appendChild(el("p", { text: background, style: "font-size:0.85rem; margin-bottom:6px;" }));
+  if (possessionsNotes) card.appendChild(el("p", { html: `<strong>Possessions:</strong> ${possessionsNotes}`, style: "font-size:0.85rem;" }));
+  return card;
+}
+
 function skillsSection(character) {
   const trained = new Set();
   if (character.personality) for (const s of character.personality.skills) trained.add(s);
@@ -171,6 +182,7 @@ export function renderCharacterSheet(container, character, { onNameChange, onGen
     derivedCard(character),
     featuresCard(character),
     powersCard(character),
+    backgroundCard(character),
   ]);
 
   container.appendChild(header);

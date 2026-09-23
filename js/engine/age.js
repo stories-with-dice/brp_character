@@ -38,3 +38,18 @@ export function ageModifiers(age, campaignPowerLevel, { minAge = DEFAULT_MIN_AGE
 
   return { skillPointModifier, characteristicPenalties, youngCharacteristicPenalty };
 }
+
+export const OLD_AGE_PENALTY_CHARACTERISTICS = ["STR", "CON", "DEX", "CHA"];
+
+/** Apply a -1 penalty to each characteristic key in `keys` (repeats allowed,
+ * since "any one characteristic of your choice" may be picked more than once
+ * for the young-character penalty), clamped at a minimum of 1. Returns a new
+ * characteristics object; does not mutate the input. */
+export function applyCharacteristicReductions(chars, keys, { min = 1 } = {}) {
+  const result = { ...chars };
+  for (const key of keys) {
+    if (!(key in result)) throw new Error(`Unknown characteristic: ${key}`);
+    result[key] = Math.max(min, result[key] - 1);
+  }
+  return result;
+}
