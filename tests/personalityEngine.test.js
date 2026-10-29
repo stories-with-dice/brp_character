@@ -14,7 +14,10 @@ test("rollPersonalityType always returns one of the four defined types", () => {
 test("resolvePersonalitySkills includes every fixed skill in the package", () => {
   const brutal = PERSONALITY_TYPES.find((p) => p.name === "Brutal");
   const names = resolvePersonalitySkills(brutal);
-  for (const skill of brutal.skills) assert.ok(names.includes(skill));
+  for (const skill of brutal.skills) {
+    assert.ok(skill === "Ride" ? names.some((n) => n.startsWith("Ride (")) : names.includes(skill), skill);
+  }
+  assert.ok(!names.includes("Ride"), "a fixed skill with specialties gets one rolled");
 });
 
 test("resolvePersonalitySkills adds the correct number of combat-skill choices", () => {
@@ -47,8 +50,8 @@ test("resolvePersonalitySkills never leaves a weapon-class combat pick without a
 
 test("resolvePersonalitySkillsManual builds the exact list from the player's picks", () => {
   const brutal = PERSONALITY_TYPES.find((p) => p.name === "Brutal");
-  const names = resolvePersonalitySkillsManual(brutal, { combatChoices: ["Firearm (Rifle)", "Melee Weapon (Sword)"] });
-  for (const skill of brutal.skills) assert.ok(names.includes(skill));
+  const names = resolvePersonalitySkillsManual(brutal, { combatChoices: ["Firearm (Rifle)", "Melee Weapon (Sword)"], fixedSpecialties: { Ride: "Horse" } });
+  for (const skill of brutal.skills) assert.ok(names.includes(skill === "Ride" ? "Ride (Horse)" : skill), skill);
   assert.ok(names.includes("Firearm (Rifle)"));
   assert.ok(names.includes("Melee Weapon (Sword)"));
   assert.equal(names.length, brutal.skills.length + 2);
@@ -76,6 +79,7 @@ test("resolvePersonalitySkillsManual validates craft/knowledge/technical/languag
     craftChoices: ["Craft (Blacksmithing)"],
     knowledgeChoices: ["Knowledge (History)"],
     combatChoices: ["Brawl"],
+    fixedSpecialties: { Pilot: "Boat", Ride: "Horse" },
   });
   assert.ok(names.includes("Craft (Blacksmithing)"));
   assert.ok(names.includes("Knowledge (History)"));
@@ -88,8 +92,20 @@ test("resolvePersonalitySkillsManual rejects a specialty pick for the wrong base
       craftChoices: ["Knowledge (History)"], // wrong base for craftChoices
       knowledgeChoices: ["Knowledge (History)"],
       combatChoices: ["Brawl"],
+      fixedSpecialties: { Pilot: "Boat", Ride: "Horse" },
     })
   );
+});
+
+test("resolvePersonalitySkillsManual needs a specialty for each fixed skill that has specialties", () => {
+  const charming = PERSONALITY_TYPES.find((p) => p.name === "Charming");
+  const picks = { languageChoices: ["Language (Other)"], combatChoices: ["Brawl"], fixedSpecialties: { Etiquette: "Court" } };
+  assert.throws(() => resolvePersonalitySkillsManual(charming, picks), /Perform: choose a specialty/);
+  picks.fixedSpecialties.Perform = "Oratory";
+  const names = resolvePersonalitySkillsManual(charming, picks);
+  assert.ok(names.includes("Etiquette (Court)"));
+  assert.ok(names.includes("Perform (Orate)"), "the book's two spellings become one");
+  assert.ok(!names.includes("Perform") && !names.includes("Etiquette"));
 });
 
 test("buildCustomPersonality accepts exactly 13 distinct skills", () => {

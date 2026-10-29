@@ -5,11 +5,11 @@
 // RNG, and hands off to the same assembleCharacter() shape as the random
 // path so render.js/export.js work identically either way.
 import { el, renderCharacterSheet } from "./render.js";
-import { PROFESSIONS, findProfession } from "../data/professions.js";
+import { findProfession } from "../data/professions.js";
 import { SKILLS, findSkill } from "../data/skills.js";
 import { PERSONALITY_TYPES, PERSONALITY_SKILL_COUNT } from "../data/personality.js";
 import { DISTINCTIVE_FEATURE_CATEGORIES, featureCountForCHA } from "../data/distinctiveFeatures.js";
-import { POWER_TYPES } from "../data/powers.js";
+import { POWER_TYPES, findPowerType, findSuperpower } from "../data/powers.js";
 
 import {
   CHARACTERISTICS,
@@ -48,11 +48,26 @@ import {
   PERSONALITY_BONUS,
 } from "../engine/personalityEngine.js";
 import { generateDistinctiveFeatures } from "../engine/distinctiveFeaturesEngine.js";
-import { assignPowerTypes, flattenPowerSetOption, buildPowersBlockManual } from "../engine/powersEngine.js";
+import {
+  assignPowerTypes,
+  flattenPowerSetOption,
+  buildPowersBlockManual,
+  buildPowerSetManual,
+  generatePowerSet,
+  canUsePowerType,
+  startingPowerRules,
+  mutationPicksUsed,
+  superpowerUnitCost,
+  superpowerMaxLevel,
+  superpowerSpecifyOptions,
+  describePower,
+} from "../engine/powersEngine.js";
 import { powerSetOptionsFor } from "../data/powers.js";
 import { mentionedWealthLevels, preferredWealthLevel, pickWealthLevel } from "../engine/wealth.js";
 import { sumAllocations, headroomFor } from "../engine/pointAllocation.js";
 import { assembleCharacter } from "../engine/characterAssembly.js";
+import { randomName } from "../engine/names.js";
+import { settingEra, skillFits, professionsForSetting, substituteOptions } from "../engine/settingFilter.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -77,15 +92,17 @@ function freshState(options) {
     youngPenaltyPicks: [],
     ageSkillPointModifier: 0,
     powerOptionIndex: null,
-    powerSlotChoices: [], // [{level, typeId}]
+    powerSlotChoices: [], // [{level, typeId, picks}], picks shaped like a power set's `powers`
+    superpowerDrafts: {}, // slot index -> {name, variant, specific, specifics, level} for the "add superpower" form
     personalityMode: null, // 'type' | 'custom'
     personalityTypeId: null,
-    personalityPicks: { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [] },
+    personalityPicks: { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [], fixedSpecialties: {} },
     personalityCustomSkills: [],
     personality: null, // resolved {name, description, skills}
     professionName: null,
     professionChoiceSelections: [], // parallel to profession.choices
     professionSpecialtyChoices: {}, // ref -> specialty
+    professionSubstitutions: {}, // ref -> substitute skill, for a skill that does not fit the setting
     skillEntries: null,
     professionalAllocations: {},
     personalAllocations: {},
@@ -145,13 +162,25 @@ function num(value, fallback = 0) {
 }
 
 function skillOptionsForState() {
-  return { useCategoryBonus: state.options.useCategoryBonus, categoryBonusMethod: state.options.categoryBonusMethod, usePowers: state.options.usePowers };
+  return { useCategoryBonus: state.options.useCategoryBonus, categoryBonusMethod: state.options.categoryBonusMethod, usePowers: state.options.usePowers, era: era() };
+}
+
+// The setting's era (data/settings.js), null for "Any". Every skill and
+// specialty list below shows only what fits it (engine/settingFilter.js).
+function era() {
+  return settingEra(state.options.setting);
+}
+function specOptions(base) {
+  return specialtyOptionsFor(base, era());
+}
+function allowedProfessions() {
+  return professionsForSetting(state.options.setting);
 }
 
 /** Render a <select> of concrete specialty options for a base skill, wired
  * to call `onChange(value)`. */
 function specialtySelect(base, currentValue, onChange) {
-  const options = specialtyOptionsFor(base) ?? [];
+  const options = specOptions(base) ?? [];
   const select = el("select", {
     onchange: (e) => onChange(e.target.value),
   });
@@ -212,7 +241,7 @@ function renderCharacteristicsStep(container) {
 
   container.appendChild(
     el("div", { class: "field-row" }, [
-      el("div", { class: "field" }, [el("label", { text: "Name" }), el("input", { type: "text", value: state.name, oninput: (e) => (state.name = e.target.value) })]),
+      el("div", { class: "field" }, [el("label", { text: "Name" }), el("input", { type: "text", value: state.name, placeholder: "(random if blank)", oninput: (e) => (state.name = e.target.value) })]),
       el("div", { class: "field" }, [el("label", { text: "Gender" }), el("input", { type: "text", value: state.gender, oninput: (e) => (state.gender = e.target.value) })]),
     ])
   );
@@ -421,16 +450,27 @@ function powerOptionLabel(option) {
   return option.map((o) => `${o.count} at ${o.level}`).join(" + ");
 }
 
+/** A new power-set slot of the given type, pre-filled with random starting
+ * powers that the player can then edit. */
+function newPowerSlot(level, typeId) {
+  const chars = state.baseCharacteristics;
+  return { level, typeId, picks: generatePowerSet(level, typeId, chars).powers };
+}
+
+function firstUsablePowerType() {
+  return POWER_TYPES.find((t) => canUsePowerType(t.id, state.baseCharacteristics)).id;
+}
+
 function renderPowersStep(container) {
   const level = state.options.campaignPowerLevel;
   const powerOptions = powerSetOptionsFor(level);
   if (state.powerOptionIndex == null) state.powerOptionIndex = 0;
   if (state.powerSlotChoices.length === 0) {
     const slots = flattenPowerSetOption(powerOptions[state.powerOptionIndex]);
-    state.powerSlotChoices = slots.map((s) => ({ level: s.level, typeId: POWER_TYPES[0].id }));
+    state.powerSlotChoices = slots.map((s) => newPowerSlot(s.level, firstUsablePowerType()));
   }
 
-  container.appendChild(el("p", { class: "readonly-note", text: "Choose how many power sets your character begins with, and what type each one is." }));
+  container.appendChild(el("p", { class: "readonly-note", text: "Choose how many power sets your character begins with, what type each one is, and its starting powers." }));
 
   const radios = powerOptions.map((option, i) =>
     el("label", { class: "toggle", style: "display:block; margin-bottom:6px;" }, [
@@ -440,7 +480,8 @@ function renderPowersStep(container) {
         ...(i === state.powerOptionIndex ? { checked: "checked" } : {}),
         onchange: () => {
           state.powerOptionIndex = i;
-          state.powerSlotChoices = flattenPowerSetOption(powerOptions[i]).map((s) => ({ level: s.level, typeId: POWER_TYPES[0].id }));
+          state.powerSlotChoices = flattenPowerSetOption(powerOptions[i]).map((s) => newPowerSlot(s.level, firstUsablePowerType()));
+          state.superpowerDrafts = {};
           rerenderStep();
         },
       }),
@@ -449,31 +490,306 @@ function renderPowersStep(container) {
   );
   container.appendChild(el("div", {}, radios));
 
-  const slotRows = state.powerSlotChoices.map((slot, i) =>
-    el("div", { class: "field-row" }, [
+  state.powerSlotChoices.forEach((slot, i) => container.appendChild(renderPowerSlot(slot, i)));
+}
+
+function renderPowerSlot(slot, i) {
+  const chars = state.baseCharacteristics;
+  const typeSelect = el(
+    "select",
+    {
+      onchange: (e) => {
+        state.powerSlotChoices[i] = newPowerSlot(slot.level, e.target.value);
+        delete state.superpowerDrafts[i];
+        rerenderStep();
+      },
+    },
+    POWER_TYPES.map((t) => {
+      const usable = canUsePowerType(t.id, chars);
+      const opt = el("option", { value: t.id, text: `${t.name} (resists via ${t.resistance})${usable ? "" : ` -- needs POW ${t.minPOW}+`}` });
+      if (!usable) opt.setAttribute("disabled", "disabled");
+      if (t.id === slot.typeId) opt.setAttribute("selected", "selected");
+      return opt;
+    })
+  );
+  const rollBtn = el("button", {
+    class: "btn btn-small",
+    text: "🎲 Roll this set",
+    onclick: () => {
+      state.powerSlotChoices[i] = newPowerSlot(slot.level, slot.typeId);
+      rerenderStep();
+    },
+  });
+
+  const wrap = el("div", { class: "card power-slot" }, [
+    el("div", { class: "field-row" }, [el("div", { class: "field" }, [el("label", { text: `Power set ${i + 1} (${slot.level})` }), typeSelect]), rollBtn]),
+  ]);
+
+  const rules = startingPowerRules(slot.typeId, slot.level, chars);
+  const pickers = { list: renderListPicker, levels: renderSorceryPicker, mutations: renderMutationPicker, points: renderSuperpowerPicker };
+  wrap.appendChild(pickers[rules.kind](slot, i, rules));
+  if (rules.extras.length) wrap.appendChild(el("p", { class: "readonly-note", text: `Also begins with: ${rules.extras.join(", ")}.` }));
+  return wrap;
+}
+
+/** Magic spells and psychic abilities: pick exactly `rules.count`. */
+function renderListPicker(slot, i, rules) {
+  const wrap = el("div", {});
+  const selected = slot.picks.map((p) => p.name);
+  wrap.appendChild(el("p", { class: "budget-line", text: `Selected: ${selected.length} / ${rules.count}, each at ${rules.skillLabel} (${rules.skill}%)` }));
+  const grid = el("div", { class: "power-picker-grid" });
+  for (const entry of rules.catalog) {
+    const checked = selected.includes(entry.name);
+    grid.appendChild(
+      el("label", { class: "toggle", title: entry.summary }, [
+        el("input", {
+          type: "checkbox",
+          ...(checked ? { checked: "checked" } : {}),
+          onchange: (e) => {
+            if (e.target.checked) {
+              if (slot.picks.length >= rules.count) {
+                e.target.checked = false;
+                return showError(`You can only pick ${rules.count}.`);
+              }
+              slot.picks.push({ name: entry.name, skill: rules.skill });
+            } else {
+              slot.picks = slot.picks.filter((p) => p.name !== entry.name);
+            }
+            showError(null);
+            rerenderStep();
+          },
+        }),
+        ` ${entry.name}`,
+      ])
+    );
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/** Sorcery: a level for each known spell, within the spell-level budget. */
+function renderSorceryPicker(slot, i, rules) {
+  const wrap = el("div", {});
+  const used = slot.picks.reduce((sum, p) => sum + p.level, 0);
+  wrap.appendChild(el("p", { class: "budget-line", text: `Spell levels used: ${used} / ${rules.budget}` }));
+  const grid = el("div", { class: "power-picker-grid" });
+  for (const spell of rules.catalog) {
+    const current = slot.picks.find((p) => p.name === spell.name)?.level ?? 0;
+    const levels = [0];
+    for (let l = spell.min; l <= spell.max; l++) levels.push(l);
+    const select = el(
+      "select",
+      {
+        onchange: (e) => {
+          const level = Number(e.target.value);
+          slot.picks = slot.picks.filter((p) => p.name !== spell.name);
+          if (level > 0) slot.picks.push({ name: spell.name, level });
+          rerenderStep();
+        },
+      },
+      levels.map((l) => {
+        const opt = el("option", { value: String(l), text: l === 0 ? "--" : `level ${l}` });
+        if (l === current) opt.setAttribute("selected", "selected");
+        return opt;
+      })
+    );
+    grid.appendChild(el("label", { class: "toggle", title: spell.summary }, [select, ` ${spell.name}`]));
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/** Mutations: none / minor / major for each mutation. */
+function renderMutationPicker(slot, i, rules) {
+  const wrap = el("div", {});
+  const used = mutationPicksUsed(slot.picks);
+  const note = rules.adverseBuysPicks
+    ? `Picks used: ${used} (allowance ${rules.picks}; each adverse pick buys 1 more beneficial pick, at most ${rules.maxAdverse} adverse). A major mutation counts as 2.`
+    : `Picks used: ${used} / ${rules.picks}. A major mutation counts as 2. Roll this set to use the D100 table with the Luck roll for adverse results.`;
+  wrap.appendChild(el("p", { class: "budget-line", text: note }));
+  const grid = el("div", { class: "power-picker-grid" });
+  for (const m of rules.catalog) {
+    const current = slot.picks.find((p) => p.name === m.name)?.severity ?? "";
+    const choices = ["", "minor", ...(m.minorOnly ? [] : ["major"])];
+    const select = el(
+      "select",
+      {
+        onchange: (e) => {
+          slot.picks = slot.picks.filter((p) => p.name !== m.name);
+          if (e.target.value) slot.picks.push({ name: m.name, severity: e.target.value, adverse: !!m.adverse });
+          rerenderStep();
+        },
+      },
+      choices.map((c) => {
+        const opt = el("option", { value: c, text: c || "--" });
+        if (c === current) opt.setAttribute("selected", "selected");
+        return opt;
+      })
+    );
+    grid.appendChild(el("label", { class: "toggle", title: m.summary }, [select, ` ${m.name}${m.adverse ? " (adverse)" : ""}`]));
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/** Superpowers: a list of bought powers plus an "add" form, within the
+ * character point budget. */
+function renderSuperpowerPicker(slot, i, rules) {
+  const chars = state.baseCharacteristics;
+  const wrap = el("div", {});
+  const used = slot.picks.reduce((sum, p) => sum + p.cost, 0);
+  wrap.appendChild(el("p", { class: "budget-line", text: `Character points used: ${used} / ${rules.budget}` }));
+  wrap.appendChild(
+    el(
+      "ul",
+      { class: "powers-list" },
+      slot.picks.map((p, idx) =>
+        el("li", {}, [
+          `${describePower("superpowers", p)} `,
+          el("button", {
+            class: "btn btn-small",
+            text: "Remove",
+            onclick: () => {
+              slot.picks.splice(idx, 1);
+              rerenderStep();
+            },
+          }),
+        ])
+      )
+    )
+  );
+
+  const draft = (state.superpowerDrafts[i] ??= { name: rules.catalog[0].name, variant: null, specific: null, specifics: [], level: 1 });
+  const power = findSuperpower(draft.name);
+  if (power.variants && !power.variants.some((v) => v.name === draft.variant)) draft.variant = power.variants[0].name;
+  const specifyOptions = superpowerSpecifyOptions(power);
+  if (specifyOptions && !power.specifyPerLevel && !specifyOptions.includes(draft.specific)) draft.specific = specifyOptions[0];
+
+  const fields = [];
+  fields.push(
+    el("div", { class: "field" }, [
+      el("label", { text: "Superpower" }),
+      el(
+        "select",
+        {
+          onchange: (e) => {
+            state.superpowerDrafts[i] = { name: e.target.value, variant: null, specific: null, specifics: [], level: 1 };
+            rerenderStep();
+          },
+        },
+        rules.catalog.map((p) => {
+          const opt = el("option", { value: p.name, text: p.name, title: p.summary });
+          if (p.name === draft.name) opt.setAttribute("selected", "selected");
+          return opt;
+        })
+      ),
+    ])
+  );
+  if (power.variants) {
+    fields.push(
       el("div", { class: "field" }, [
-        el("label", { text: `Power set ${i + 1} (${slot.level})` }),
+        el("label", { text: "Option" }),
         el(
           "select",
-          {
-            onchange: (e) => {
-              state.powerSlotChoices[i].typeId = e.target.value;
-            },
-          },
-          POWER_TYPES.map((t) => {
-            const opt = el("option", { value: t.id, text: `${t.name} (resists via ${t.resistance})` });
-            if (t.id === slot.typeId) opt.setAttribute("selected", "selected");
+          { onchange: (e) => { draft.variant = e.target.value; rerenderStep(); } },
+          power.variants.map((v) => {
+            const opt = el("option", { value: v.name, text: `${v.name} (${power.costPerSIZ ? v.cost * chars.SIZ : v.cost}/level)` });
+            if (v.name === draft.variant) opt.setAttribute("selected", "selected");
             return opt;
           })
         ),
-      ]),
-    ])
+      ])
+    );
+  }
+  if (specifyOptions && !power.specifyPerLevel) {
+    fields.push(
+      el("div", { class: "field" }, [
+        el("label", { text: "Type" }),
+        el(
+          "select",
+          { onchange: (e) => { draft.specific = e.target.value; } },
+          specifyOptions.map((o) => {
+            const opt = el("option", { value: o, text: o });
+            if (o === draft.specific) opt.setAttribute("selected", "selected");
+            return opt;
+          })
+        ),
+      ])
+    );
+  }
+  if (!power.specifyPerLevel) {
+    const maxLevel = superpowerMaxLevel(power);
+    fields.push(
+      el("div", { class: "field" }, [
+        el("label", { text: "Level" }),
+        el("input", {
+          type: "number",
+          min: "1",
+          ...(Number.isFinite(maxLevel) ? { max: String(maxLevel) } : {}),
+          value: draft.level,
+          onchange: (e) => { draft.level = Math.max(1, Math.floor(num(e.target.value, 1))); rerenderStep(); },
+        }),
+      ])
+    );
+  }
+  const unit = superpowerUnitCost(power, draft.variant, chars);
+  const level = power.specifyPerLevel ? draft.specifics.length : draft.level;
+  fields.push(el("div", { class: "field" }, [el("label", { text: "Cost" }), el("span", { text: `${unit * level} pts (${unit}/level)` })]));
+  fields.push(
+    el("button", {
+      class: "btn btn-small",
+      text: "Add",
+      onclick: () => {
+        const pick = { name: power.name, level, cost: unit * level };
+        if (power.variants) pick.variant = draft.variant;
+        if (specifyOptions) pick.specifics = power.specifyPerLevel ? [...draft.specifics] : [draft.specific];
+        try {
+          buildPowerSetManual(slot.level, slot.typeId, chars, [...slot.picks, pick]);
+        } catch (err) {
+          return showError(err.message);
+        }
+        slot.picks.push(pick);
+        delete state.superpowerDrafts[i];
+        rerenderStep();
+      },
+    })
   );
-  container.appendChild(el("div", {}, slotRows));
+  wrap.appendChild(el("p", { class: "readonly-note", text: power.summary }));
+  wrap.appendChild(el("div", { class: "field-row" }, fields));
+
+  if (power.specifyPerLevel) {
+    // Adaptation: each level picks one more environment.
+    const grid = el("div", { class: "power-picker-grid" });
+    for (const o of specifyOptions) {
+      grid.appendChild(
+        el("label", { class: "toggle" }, [
+          el("input", {
+            type: "checkbox",
+            ...(draft.specifics.includes(o) ? { checked: "checked" } : {}),
+            onchange: (e) => {
+              draft.specifics = e.target.checked ? [...draft.specifics, o] : draft.specifics.filter((x) => x !== o);
+              rerenderStep();
+            },
+          }),
+          ` ${o}`,
+        ])
+      );
+    }
+    wrap.appendChild(grid);
+  }
+  return wrap;
 }
 
 function finalizePowersStep() {
-  if (state.powerSlotChoices.some((s) => !s.typeId)) throw new Error("Choose a power type for every power set.");
+  const chars = state.baseCharacteristics;
+  state.powerSlotChoices.forEach((slot, i) => {
+    if (!slot.typeId) throw new Error("Choose a power type for every power set.");
+    try {
+      buildPowerSetManual(slot.level, slot.typeId, chars, slot.picks);
+    } catch (err) {
+      throw new Error(`Power set ${i + 1} (${findPowerType(slot.typeId).name}): ${err.message}`);
+    }
+  });
 }
 
 // ------------------------------------------------------------ Step: Age
@@ -568,19 +884,23 @@ function finalizeAgeStep() {
 // ------------------------------------------------------------ Step: Personality
 
 function personalitySpecialtyPicks(personality, rng = Math.random) {
-  const picks = { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [] };
+  const picks = { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [], fixedSpecialties: {} };
+  for (const ref of personality.skills.filter(refNeedsSpecialtyChoice)) {
+    const options = specOptions(baseSkillName(ref));
+    picks.fixedSpecialties[ref] = options[Math.floor(rng() * options.length)];
+  }
   const bases = { craftChoices: "Craft", knowledgeChoices: "Knowledge", technicalChoices: "Technical Skill", languageChoices: "Language" };
   for (const [key, base] of Object.entries(bases)) {
     const count = personality[key] ?? 0;
     for (let i = 0; i < count; i++) {
-      const options = specialtyOptionsFor(base) ?? [];
+      const options = specOptions(base) ?? [];
       const pick = options[Math.floor(rng() * options.length)];
       picks[key].push(`${base} (${pick})`);
     }
   }
   const combatCount = personality.combatChoices ?? 0;
   const fixedBases = new Set(personality.skills.map(baseSkillName));
-  const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b));
+  const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b) && skillFits(b, era()));
   const usedBases = new Set();
   for (let i = 0; i < combatCount; i++) {
     const pool = availableBases.filter((b) => !usedBases.has(b));
@@ -638,6 +958,26 @@ function renderPersonalityStep(container) {
   container.appendChild(el("p", { class: "readonly-note", text: type.description }));
   container.appendChild(el("p", { class: "readonly-note", text: `Fixed skills (+20 each): ${type.skills.join(", ")}` }));
 
+  const fixedOpen = type.skills.filter(refNeedsSpecialtyChoice);
+  if (fixedOpen.length) {
+    container.appendChild(
+      el(
+        "div",
+        { class: "choice-pool" },
+        [el("div", { class: "choice-pool-title", text: "Specialty for each fixed skill" })].concat(
+          fixedOpen.map((ref) =>
+            el("label", { class: "choice-item" }, [
+              `${ref}: `,
+              specialtySelect(baseSkillName(ref), state.personalityPicks.fixedSpecialties[ref], (v) => {
+                state.personalityPicks.fixedSpecialties[ref] = v;
+              }),
+            ])
+          )
+        )
+      )
+    );
+  }
+
   const bases = { craftChoices: "Craft", knowledgeChoices: "Knowledge", technicalChoices: "Technical Skill", languageChoices: "Language" };
   for (const [key, base] of Object.entries(bases)) {
     const count = type[key] ?? 0;
@@ -660,7 +1000,7 @@ function renderPersonalityStep(container) {
 
   if (type.combatChoices) {
     const fixedBases = new Set(type.skills.map(baseSkillName));
-    const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b));
+    const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b) && skillFits(b, era()));
     const picks = state.personalityPicks.combatChoices;
     container.appendChild(
       el(
@@ -683,7 +1023,7 @@ function renderCombatSkillPicker(availableBases, picks, i) {
       onchange: (e) => {
         const base = e.target.value;
         const skillDef = findSkill(base);
-        picks[i] = skillDef?.specialty ? resolveSkillDisplayNameManual(`${base} (any)`, specialtyOptionsFor(base)[0]) : base;
+        picks[i] = skillDef?.specialty ? resolveSkillDisplayNameManual(`${base} (any)`, specOptions(base)[0]) : base;
         rerenderStep();
       },
     },
@@ -696,7 +1036,7 @@ function renderCombatSkillPicker(availableBases, picks, i) {
   const wrap = el("span", { class: "choice-item" }, [baseSelect]);
   const skillDef = findSkill(currentBase);
   if (skillDef?.specialty) {
-    const currentSpecialty = current.includes("(") ? parseSkillRef(current).specialty : specialtyOptionsFor(currentBase)[0];
+    const currentSpecialty = current.includes("(") ? parseSkillRef(current).specialty : specOptions(currentBase)[0];
     wrap.appendChild(specialtySelect(currentBase, currentSpecialty, (v) => { picks[i] = `${currentBase} (${v})`; }));
     if (!current) picks[i] = `${currentBase} (${currentSpecialty})`;
   } else if (!current) {
@@ -712,7 +1052,7 @@ function renderCustomPersonalityPicker() {
 
   // Non-specialty skills: simple checkboxes.
   const grid = el("div", { class: "wizard-skill-alloc" });
-  for (const skillDef of SKILLS.filter((s) => !s.specialty)) {
+  for (const skillDef of SKILLS.filter((s) => !s.specialty && skillFits(s.name, era()))) {
     const checked = state.personalityCustomSkills.includes(skillDef.name);
     grid.appendChild(
       el("label", { class: "toggle" }, [
@@ -767,16 +1107,16 @@ function renderCustomPersonalityPicker() {
 }
 
 function renderAddSpecialtySkillControl(onAdd) {
-  const specialtySkills = SKILLS.filter((s) => s.specialty);
+  const specialtySkills = SKILLS.filter((s) => s.specialty && skillFits(s.name, era()));
   const baseSelect = el(
     "select",
     {},
     specialtySkills.map((s) => el("option", { value: s.name, text: s.name }))
   );
-  let specialtySelectEl = specialtySelect(specialtySkills[0].name, specialtyOptionsFor(specialtySkills[0].name)?.[0], () => {});
+  let specialtySelectEl = specialtySelect(specialtySkills[0].name, specOptions(specialtySkills[0].name)?.[0], () => {});
   const container = el("span", { class: "add-skill-row" }, [baseSelect, specialtySelectEl]);
   baseSelect.addEventListener("change", () => {
-    const newSelect = specialtySelect(baseSelect.value, specialtyOptionsFor(baseSelect.value)?.[0], () => {});
+    const newSelect = specialtySelect(baseSelect.value, specOptions(baseSelect.value)?.[0], () => {});
     container.replaceChild(newSelect, specialtySelectEl);
     specialtySelectEl = newSelect;
   });
@@ -802,9 +1142,12 @@ function finalizePersonalityStep() {
 // ------------------------------------------------------------ Step: Profession & Skills
 
 function renderProfessionStep(container) {
-  if (!state.professionName) {
-    state.professionName = PROFESSIONS[0].name;
+  const allowed = allowedProfessions();
+  if (!state.professionName || !allowed.some((p) => p.name === state.professionName)) {
+    state.professionName = allowed[0].name;
     state.professionChoiceSelections = findProfession(state.professionName).choices.map(() => []);
+    state.professionSpecialtyChoices = {};
+    state.professionSubstitutions = {};
   }
   const profession = findProfession(state.professionName);
 
@@ -816,6 +1159,7 @@ function renderProfessionStep(container) {
         const p = findProfession(state.professionName);
         state.professionChoiceSelections = p.choices.map(() => []);
         state.professionSpecialtyChoices = {};
+        state.professionSubstitutions = {};
         state.skillEntries = null;
         state.professionalAllocations = {};
         state.personalAllocations = {};
@@ -823,7 +1167,7 @@ function renderProfessionStep(container) {
         rerenderStep();
       },
     },
-    [...PROFESSIONS].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
+    [...allowed].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
       const opt = el("option", { value: p.name, text: p.name });
       if (p.name === state.professionName) opt.setAttribute("selected", "selected");
       return opt;
@@ -834,12 +1178,12 @@ function renderProfessionStep(container) {
   if (profession.special) container.appendChild(el("p", { class: "readonly-note", html: `<strong>Special:</strong> ${profession.special}` }));
 
   // Fixed skills' specialty resolution
-  const openFixedRefs = profession.fixed.filter(refNeedsSpecialtyChoice);
+  const openFixedRefs = profession.fixed.filter((r) => refNeedsSpecialtyChoice(r) && specOptions(parseSkillRef(r).base).length);
   if (openFixedRefs.length > 0) {
     container.appendChild(el("div", { class: "choice-pool-title", text: "Choose specialties for this profession's fixed skills:" }));
     for (const ref of openFixedRefs) {
       const base = parseSkillRef(ref).base;
-      const current = state.professionSpecialtyChoices[ref] ?? specialtyOptionsFor(base)[0];
+      const current = state.professionSpecialtyChoices[ref] ?? specOptions(base)[0];
       state.professionSpecialtyChoices[ref] = current;
       container.appendChild(
         el("div", { class: "choice-item" }, [`${ref}: `, specialtySelect(base, current, (v) => (state.professionSpecialtyChoices[ref] = v))])
@@ -851,7 +1195,50 @@ function renderProfessionStep(container) {
 
   profession.choices.forEach((choice, i) => renderChoicePool(container, profession, choice, i));
 
+  const misfits = professionMisfits(profession);
+  if (misfits.length) {
+    const pool = el("div", { class: "choice-pool" }, [
+      el("div", { class: "choice-pool-title", text: "Not in this setting: choose a substitute (core book p.22)" }),
+    ]);
+    for (const { ref, name, options } of misfits) {
+      const select = el("select", { onchange: (e) => { state.professionSubstitutions[ref] = e.target.value; rerenderStep(); } },
+        options.map((o) => {
+          const opt = el("option", { value: o, text: o });
+          if (o === state.professionSubstitutions[ref]) opt.setAttribute("selected", "selected");
+          return opt;
+        }));
+      pool.appendChild(el("div", { class: "choice-item" }, [`${name} → `, select]));
+    }
+    container.appendChild(pool);
+  }
+
   container.appendChild(renderSkillPointAllocation(profession));
+}
+
+// The profession's chosen skills that do not fit the setting, each with its
+// substitutes (engine/settingFilter.js substituteOptions): other specialties
+// of the same skill first, else the other skills of its category. Sets a
+// default substitute (the first option) where none is chosen yet.
+function professionMisfits(profession) {
+  const refs = [...profession.fixed, ...state.professionChoiceSelections.flat().filter(Boolean)];
+  const taken = new Set();
+  const out = [];
+  for (const ref of refs) {
+    const open = refNeedsSpecialtyChoice(ref);
+    const name = open && !specOptions(parseSkillRef(ref).base).length ? ref : resolveSkillDisplayNameManual(ref, open ? state.professionSpecialtyChoices[ref] : null);
+    if (!name) continue;
+    if (skillFits(name, era())) { taken.add(name); continue; }
+    const options = substituteOptions(name, era(), taken);
+    if (!options.length) continue;
+    if (!options.includes(state.professionSubstitutions[ref])) state.professionSubstitutions[ref] = options[0];
+    taken.add(state.professionSubstitutions[ref]);
+    out.push({ ref, name, options });
+  }
+  return out;
+}
+
+function professionSettingArgs() {
+  return { era: era(), substitutions: state.professionSubstitutions };
 }
 
 /** True when a choice pool has fewer distinct refs than the number of picks
@@ -877,7 +1264,7 @@ function renderRepeatSlotPool(pool, choice, index) {
       {
         onchange: (e) => {
           const base = e.target.value;
-          const options = specialtyOptionsFor(base) ?? [];
+          const options = specOptions(base) ?? [];
           selected[slotIdx] = options.length ? `${base} (${options[0]})` : base;
           rerenderStep();
         },
@@ -889,7 +1276,7 @@ function renderRepeatSlotPool(pool, choice, index) {
       })
     );
     row.appendChild(baseSelect);
-    const options = specialtyOptionsFor(currentBase);
+    const options = specOptions(currentBase);
     if (options && options.length > 0) {
       const currentSpecialty = current ? parseSkillRef(current).specialty : options[0];
       if (!current) selected[slotIdx] = `${currentBase} (${currentSpecialty})`;
@@ -970,11 +1357,12 @@ function renderChoicePool(container, profession, choice, index) {
             },
           }),
           ` ${ref}`,
+          skillFits(ref, era()) ? "" : el("span", { class: "readonly-note", text: " (not in this setting: gets a substitute)" }),
         ])
       );
-      if (isChecked && refNeedsSpecialtyChoice(ref)) {
+      if (isChecked && refNeedsSpecialtyChoice(ref) && specOptions(parseSkillRef(ref).base).length) {
         const base = parseSkillRef(ref).base;
-        const current = state.professionSpecialtyChoices[ref] ?? specialtyOptionsFor(base)[0];
+        const current = state.professionSpecialtyChoices[ref] ?? specOptions(base)[0];
         state.professionSpecialtyChoices[ref] = current;
         row.appendChild(specialtySelect(base, current, (v) => (state.professionSpecialtyChoices[ref] = v)));
       }
@@ -989,14 +1377,14 @@ function renderAddSpecialtySkillControlForWildcard(onAdd) {
   const baseSelect = el(
     "select",
     {},
-    SKILLS.map((s) => el("option", { value: s.name, text: s.name }))
+    SKILLS.filter((s) => skillFits(s.name, era())).map((s) => el("option", { value: s.name, text: s.name }))
   );
   let specialtyEl = null;
   const container = el("span", { class: "add-skill-row" }, [baseSelect]);
   const syncSpecialty = () => {
     if (specialtyEl) container.removeChild(specialtyEl);
     const skillDef = findSkill(baseSelect.value);
-    specialtyEl = skillDef?.specialty ? specialtySelect(baseSelect.value, specialtyOptionsFor(baseSelect.value)?.[0], () => {}) : null;
+    specialtyEl = skillDef?.specialty ? specialtySelect(baseSelect.value, specOptions(baseSelect.value)?.[0], () => {}) : null;
     if (specialtyEl) container.insertBefore(specialtyEl, container.lastChild);
   };
   baseSelect.addEventListener("change", syncSpecialty);
@@ -1018,7 +1406,7 @@ function buildSkillEntriesForProfessionStep(profession) {
   const skillOptions = skillOptionsForState();
   const entries = baselineSkillEntries(state.characteristics, skillOptions);
   try {
-    const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+    const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
     for (const name of names) ensureSkillEntry(entries, name, state.characteristics, skillOptions);
   } catch {
     // choices incomplete; still show baseline entries so the allocator has something to render
@@ -1055,7 +1443,7 @@ function renderSkillPointAllocation(profession) {
 
   let professionSkillNames = [];
   try {
-    professionSkillNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+    professionSkillNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
   } catch {
     professionSkillNames = [];
   }
@@ -1123,7 +1511,7 @@ function renderAllocationGrid(skillNames, entries, allocationMap, cap, baselineF
 
 function finalizeProfessionStep() {
   const profession = findProfession(state.professionName);
-  const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+  const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
   const skillOptions = skillOptionsForState();
   const entries = baselineSkillEntries(state.characteristics, skillOptions);
   for (const name of names) ensureSkillEntry(entries, name, state.characteristics, skillOptions);
@@ -1250,10 +1638,10 @@ function buildFinalCharacter() {
     hitLocationOption: state.options.useHitLocation,
   });
   const profession = findProfession(state.professionName);
-  const powers = state.options.usePowers ? buildPowersBlockManual(derived.powerPoints, state.powerSlotChoices) : null;
+  const powers = state.options.usePowers ? buildPowersBlockManual(derived.powerPoints, state.powerSlotChoices, state.baseCharacteristics) : null;
 
   return assembleCharacter({
-    name: state.name,
+    name: state.name.trim() || randomName(state.gender),
     gender: state.gender,
     age: state.age,
     professionName: profession.name,
@@ -1325,8 +1713,9 @@ function randomizeCurrentStep() {
     const level = state.options.campaignPowerLevel;
     const options = powerSetOptionsFor(level);
     state.powerOptionIndex = Math.floor(Math.random() * options.length);
-    const assignments = assignPowerTypes(options[state.powerOptionIndex]);
-    state.powerSlotChoices = assignments.map((a) => ({ level: a.level, typeId: a.type }));
+    const assignments = assignPowerTypes(options[state.powerOptionIndex], Math.random, { characteristics: state.baseCharacteristics });
+    state.powerSlotChoices = assignments.map((a) => newPowerSlot(a.level, a.type));
+    state.superpowerDrafts = {};
   } else if (id === "age") {
     state.age = rollStartingAge();
   } else if (id === "personality") {
@@ -1335,9 +1724,10 @@ function randomizeCurrentStep() {
     state.personalityTypeId = type.id;
     state.personalityPicks = personalitySpecialtyPicks(type);
   } else if (id === "profession") {
-    const profession = PROFESSIONS[Math.floor(Math.random() * PROFESSIONS.length)];
+    const allowed = allowedProfessions();
+    const profession = allowed[Math.floor(Math.random() * allowed.length)];
     state.professionName = profession.name;
-    const names = resolveProfessionSkills(profession);
+    const names = resolveProfessionSkills(profession, Math.random, era());
     // Reconstruct choice selections/specialty choices from the random resolution
     // as best-effort: assign whole pool randomly then let allocation randomize too.
     state.professionChoiceSelections = profession.choices.map((choice) => {
@@ -1355,7 +1745,7 @@ function randomizeCurrentStep() {
         const picks = [];
         for (let i = 0; i < choice.count; i++) {
           const base = bases[Math.floor(Math.random() * bases.length)];
-          const options = specialtyOptionsFor(base) ?? [];
+          const options = specOptions(base) ?? [];
           let name = options.length ? `${base} (${options[Math.floor(Math.random() * options.length)]})` : base;
           let attempts = 0;
           while (picks.includes(name) && attempts < 20 && options.length > 0) {
@@ -1373,13 +1763,17 @@ function randomizeCurrentStep() {
     for (const ref of [...profession.fixed, ...state.professionChoiceSelections.flat()]) {
       if (refNeedsSpecialtyChoice(ref)) {
         const base = parseSkillRef(ref).base;
-        const options = specialtyOptionsFor(base);
-        state.professionSpecialtyChoices[ref] = options[Math.floor(Math.random() * options.length)];
+        const options = specOptions(base);
+        if (options.length) state.professionSpecialtyChoices[ref] = options[Math.floor(Math.random() * options.length)];
       }
+    }
+    state.professionSubstitutions = {};
+    for (const m of professionMisfits(profession)) {
+      state.professionSubstitutions[m.ref] = m.options[Math.floor(Math.random() * m.options.length)];
     }
     state.personalExtraSkills = [];
     try {
-      const resolvedNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+      const resolvedNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
       const skillOptions = skillOptionsForState();
       const entries = baselineSkillEntries(state.characteristics, skillOptions);
       for (const n of resolvedNames) ensureSkillEntry(entries, n, state.characteristics, skillOptions);

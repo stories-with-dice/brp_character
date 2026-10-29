@@ -53,7 +53,7 @@ export const OPEN_SPECIALTY_SKILLS = {
   Art: ["Calligraphy", "Composing", "Conceptual Art", "Digital Art", "Drawing", "Painting", "Photography", "Poetry", "Sculpture", "Sketching", "Songwriting", "Writing"],
   Craft: ["Blacksmithing", "Carpentry", "Ceramics", "Cooking", "Leatherworking", "Locksmithing", "Metallurgy", "Stonemasonry"],
   Knowledge: ["Academic Lore", "Accounting", "Anthropology", "Archaeology", "Art History", "Blasphemous Lore", "Business", "Espionage", "Folklore", "History", "Law", "Linguistics", "Literature", "Occult", "Philosophy", "Politics", "Region", "Religion", "Streetwise"],
-  Language: ["Own Language", "Other Language"],
+  Language: ["Own", "Other"],
   Science: ["Astronomy", "Behavioral Science", "Biology", "Botany", "Chemistry", "Cryptography", "Genetics", "Geology", "Mathematics", "Meteorology", "Natural History", "Pharmacology", "Physics", "Planetology", "Psychology", "Quantum Mechanics", "Xenobiology", "Zoology"],
   "Technical Skill": ["Clockwork", "Computers", "Cybernetics", "Electronics", "Robotics", "Sensors", "Siege Engines", "Traps"],
   Etiquette: ["Business", "Court", "High Society", "Military", "Street"],
@@ -65,7 +65,61 @@ export const OPEN_SPECIALTY_SKILLS = {
   Repair: ["Electrical", "Electronic", "Engineering", "Hydroelectric", "Mechanical", "Structural", "Quantum"],
 };
 
-/** @typedef {{name:string, category:string, base:string, desc:string, specialty?: 'open'|'weaponClass', specialtyKey?: string, uncommon?: boolean}} Skill */
+// The book spells some specialties two ways: the skill's own "Specialties:"
+// list (Chapter 3) says "Computers", while a profession says "Technical Skill
+// (Computer Use)". Without this map one character could get both as two
+// skills. Each variant maps to the Chapter 3 spelling (skillRef.js canonicalSpecialty).
+export const SPECIALTY_ALIASES = {
+  Firearm: { Handgun: "Pistol" },
+  Language: { "Own Language": "Own", "Other Language": "Other" },
+  Perform: { Oratory: "Orate" },
+  Pilot: { Aircraft: "Airplane" },
+  Repair: { Electronics: "Electronic" },
+  Science: { Pharmacy: "Pharmacology" },
+  "Technical Skill": { "Computer Use": "Computers" },
+};
+
+// Earliest era (an index into ERAS in settings.js) of each specialty, for the
+// setting filter (engine/settingFilter.js). A specialty not listed here is era
+// 0: it fits every setting. Sources: the four weapon tables of Chapter 8
+// (Primitive, Historic, Modern, Advanced; flintlocks and muskets are in the
+// Modern table, so Firearm starts in the Renaissance), the skills' Setting
+// Notes in Chapter 3 (Energy Weapon "usually only in futuristic settings"),
+// and this generator's judgment where the book is silent (vehicles, sciences).
+export const SPECIALTY_ERAS = {
+  Artillery: { Ballista: 1, Trebuchet: 2, Cannon: 3, "Vehicle-Mounted": 5 },
+  "Energy Weapon": { "Energy Pistol": 7, "Energy Rifle": 7 },
+  Firearm: { Pistol: 3, Rifle: 3, Shotgun: 3, Revolver: 4, "Machine Gun": 4, "Submachine Gun": 5 },
+  "Heavy Weapon": { Grenade: 5, Bazooka: 5, Flamethrower: 5, "Rocket Launcher": 5, "Mini Gun": 6 },
+  "Melee Weapon": { Sword: 1, Mace: 1, Polearm: 1, Hammer: 1, Flail: 2 },
+  "Missile Weapon": { Crossbow: 2 },
+  Parry: { Sword: 1, Mace: 1, Polearm: 1, Hammer: 1, Flail: 2 },
+  Shield: { Buckler: 1 },
+  Art: { Calligraphy: 1, Writing: 1, Photography: 4, "Conceptual Art": 5, "Digital Art": 6 },
+  Craft: { Blacksmithing: 1, Metallurgy: 1, Metalwork: 1, Locksmithing: 1, Photography: 4, "Computer Hardware or Code": 6 },
+  Knowledge: {
+    "Academic Lore": 1, Accounting: 1, Business: 1, History: 1, Law: 1, Literature: 1, Philosophy: 1, Politics: 1,
+    "Natural History": 1, Linguistics: 3, "Art History": 3, Anthropology: 4, Archaeology: 4,
+  },
+  Language: { "Other, a programming language": 6 },
+  Literacy: { Own: 1, Other: 1 },
+  Science: {
+    Astronomy: 1, Botany: 1, Cryptography: 1, Mathematics: 1, "Natural History": 1, Biology: 3, Chemistry: 3,
+    Physics: 3, Zoology: 3, Geology: 4, Meteorology: 4, Pharmacology: 4, Psychology: 4, "Behavioral Science": 5,
+    "Quantum Mechanics": 5, Genetics: 6, Planetology: 8, Xenobiology: 8,
+  },
+  "Technical Skill": { "Siege Engines": 1, Clockwork: 3, Electronics: 5, Sensors: 5, Computers: 6, Robotics: 6, Cybernetics: 7 },
+  Etiquette: { Business: 1, Court: 1, "High Society": 1, Military: 1, Street: 1 },
+  Perform: { "Conduct Orchestra": 3 },
+  Pilot: { Balloon: 3, Airship: 4, Airplane: 5, Submarine: 5, "Jet Aircraft": 5, Helicopter: 5, Hovercraft: 6, Jetpack: 7, Starship: 8 },
+  Drive: { Cart: 1, Chariot: 1, Carriage: 2, Sleigh: 2, Bicycle: 4, Automobile: 5, Motorcycle: 5, Truck: 5 },
+  Ride: { Camel: 1, Elephant: 1, Horse: 1 },
+  "Heavy Machine": { Crane: 1, Boiler: 4, Engine: 4, Locomotive: 4, "Armored Vehicle": 5, Bulldozer: 5, Turbine: 5 },
+  Repair: { Engineering: 1, Structural: 1, Mechanical: 2, Electrical: 4, Electronic: 5, Hydroelectric: 5, Quantum: 8 },
+};
+
+/** @typedef {{name:string, category:string, base:string, desc:string, specialty?: 'open'|'weaponClass', specialtyKey?: string, uncommon?: boolean, era?: number}} Skill
+ * `era`: earliest era of a skill without specialties (settings.js ERAS); none = 0. */
 
 /** @type {Skill[]} */
 export const SKILLS = [
@@ -77,7 +131,7 @@ export const SKILLS = [
   { name: "Climb", category: "Physical", base: "40", desc: "Climb walls, trees, and cliffs." },
   { name: "Command", category: "Communication", base: "05", desc: "Inspire and direct subordinates." },
   { name: "Craft", category: "Manipulation", base: "05", desc: "Construct and build things by hand.", specialty: "open", specialtyKey: "Craft" },
-  { name: "Demolition", category: "Manipulation", base: "01", desc: "Store, transport, set, and detonate explosives with precision." },
+  { name: "Demolition", category: "Manipulation", base: "01", era: 3, desc: "Store, transport, set, and detonate explosives with precision." },
   { name: "Disguise", category: "Communication", base: "01", desc: "Appear as a different person via costume and makeup." },
   { name: "Dodge", category: "Physical", base: "DEX*2", desc: "Evade attacks." },
   { name: "Drive", category: "Physical", base: "20 or 01", desc: "Steer and control ground vehicles.", specialty: "open", specialtyKey: "Drive" },
@@ -109,7 +163,7 @@ export const SKILLS = [
   { name: "Persuade", category: "Communication", base: "15", desc: "Convince someone lastingly that an idea is correct." },
   { name: "Pilot", category: "Physical", base: "01", desc: "Steer and control air, water, or space vehicles.", specialty: "open", specialtyKey: "Pilot" },
   { name: "Projection", category: "Physical", base: "DEX*2", desc: "Target power-based attacks.", optionOnly: "powers" },
-  { name: "Psychotherapy", category: "Mental", base: "01 or 00", desc: "Evaluate and treat mental illness and trauma." },
+  { name: "Psychotherapy", category: "Mental", base: "01 or 00", era: 4, desc: "Evaluate and treat mental illness and trauma." },
   { name: "Repair", category: "Manipulation", base: "15", desc: "Fix damaged or broken equipment.", specialty: "open", specialtyKey: "Repair" },
   { name: "Research", category: "Perception", base: "25", desc: "Locate and identify information sources." },
   { name: "Ride", category: "Physical", base: "05", desc: "Ride, handle, and care for a specific animal type.", specialty: "open", specialtyKey: "Ride" },

@@ -1,7 +1,7 @@
 // Parses profession/personality skill reference strings like "Firearm (Rifle)",
 // "Knowledge (Law)", "Art (any)", "Melee Weapon (any)" into a base skill name
 // plus an optional specialty, and resolves "(any)" into a concrete specialty.
-import { WEAPON_CLASSES, OPEN_SPECIALTY_SKILLS, findSkill } from "../data/skills.js";
+import { WEAPON_CLASSES, OPEN_SPECIALTY_SKILLS, SPECIALTY_ALIASES, SPECIALTY_ERAS, findSkill } from "../data/skills.js";
 
 const WILDCARD_RE = /^Any skill/i;
 
@@ -16,13 +16,22 @@ export function parseSkillRef(ref) {
 
 /** The list of concrete specialty names offered for a base skill (weapon
  * class or open specialty list), or null if that skill has no specialty
- * system / isn't found. Used to populate specialty pickers in the UI. */
-export function specialtyOptionsFor(base) {
+ * system / isn't found. Used to populate specialty pickers in the UI.
+ * With an `era` (the campaign setting's, settings.js ERAS), only the
+ * specialties of that era or earlier (SPECIALTY_ERAS): Firearm in era 3 ->
+ * Pistol, Rifle, Shotgun. */
+export function specialtyOptionsFor(base, era = null) {
   const skillDef = findSkill(base);
   const key = skillDef?.specialtyKey ?? base;
-  if (WEAPON_CLASSES[key]) return WEAPON_CLASSES[key];
-  if (OPEN_SPECIALTY_SKILLS[key]) return OPEN_SPECIALTY_SKILLS[key];
-  return null;
+  const options = WEAPON_CLASSES[key] ?? OPEN_SPECIALTY_SKILLS[key] ?? null;
+  if (!options || era == null) return options;
+  return options.filter((o) => (SPECIALTY_ERAS[base]?.[o] ?? 0) <= era);
+}
+
+/** The one spelling of a specialty the book writes two ways, e.g.
+ * ("Technical Skill", "Computer Use") -> "Computers". Other specialties pass through. */
+export function canonicalSpecialty(base, specialty) {
+  return SPECIALTY_ALIASES[base]?.[specialty] ?? specialty;
 }
 
 function isOpenSpecialtyText(specialty) {
@@ -45,7 +54,7 @@ export function refNeedsSpecialtyChoice(ref) {
 /** Resolve "any"/"various" specialties to a concrete choice; leaves specific
  * specialties (e.g. "Rifle", "Law") untouched. Returns the display name to
  * use for this skill instance, e.g. "Melee Weapon (Sword)". */
-export function resolveSkillDisplayName(ref, rng = Math.random) {
+export function resolveSkillDisplayName(ref, rng = Math.random, era = null) {
   const { base, specialty, wildcard } = parseSkillRef(ref);
   if (wildcard) return null; // caller must special-case wildcard "any skill" refs
   const skillDef = findSkill(base);
@@ -53,9 +62,11 @@ export function resolveSkillDisplayName(ref, rng = Math.random) {
 
   if (!skillDef.specialty) return base; // no specialty system for this skill
 
-  if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
+  if (!isOpenSpecialtyText(specialty)) return `${base} (${canonicalSpecialty(base, specialty)})`;
 
-  const pool = specialtyOptionsFor(base);
+  // Prefer a specialty of the setting's era; with none, any (the caller substitutes it).
+  const fitting = specialtyOptionsFor(base, era);
+  const pool = fitting?.length ? fitting : specialtyOptionsFor(base);
   if (!pool || pool.length === 0) return base;
   const pick = pool[Math.floor(rng() * pool.length)];
   return `${base} (${pick})`;
@@ -70,9 +81,9 @@ export function resolveSkillDisplayNameManual(ref, chosenSpecialty) {
   const skillDef = findSkill(base);
   if (!skillDef) return ref;
   if (!skillDef.specialty) return base;
-  if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
+  if (!isOpenSpecialtyText(specialty)) return `${base} (${canonicalSpecialty(base, specialty)})`;
   if (!chosenSpecialty) return null; // caller must supply a choice for open specialties
-  return `${base} (${chosenSpecialty})`;
+  return `${base} (${canonicalSpecialty(base, chosenSpecialty)})`;
 }
 
 export function baseSkillName(displayName) {

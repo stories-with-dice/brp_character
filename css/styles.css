@@ -152,6 +152,8 @@ body {
 .wizard-skill-alloc { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 10px; align-items: center; font-size: 0.85rem; max-height: 340px; overflow-y: auto; padding-right: 4px; }
 .wizard-skill-alloc .col-head { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid var(--panel-border); padding-bottom: 4px; }
 .wizard-skill-alloc input[type="number"] { width: 64px; }
+.power-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 12px; font-size: 0.85rem; max-height: 340px; overflow-y: auto; }
+.power-slot { margin-top: 12px; }
 .wizard-skill-alloc .skill-label.over-cap { color: var(--danger); }
 
 .add-skill-row { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
@@ -301,6 +303,8 @@ select, input[type="text"], input[type="number"] {
 }
 
 .features-list, .powers-list { margin: 0; padding-left: 18px; font-size: 0.87rem; }
+.power-set + .power-set { margin-top: 8px; }
+.power-set h4 { margin: 0 0 4px; font-size: 0.85rem; }
 .badge {
   display: inline-block;
   background: var(--accent-dark);

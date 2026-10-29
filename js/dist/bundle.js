@@ -428,6 +428,12 @@
   function roll2d6plus6(rng = Math.random) {
     return rollDice(2, 6, rng) + 6;
   }
+  function roll1d100(rng = Math.random) {
+    const tens = rollDie(10, rng) - 1;
+    const ones = rollDie(10, rng) - 1;
+    const result = tens * 10 + ones;
+    return result === 0 ? 100 : result;
+  }
 
   // js/engine/characteristics.js
   var CHARACTERISTICS = ["STR", "CON", "SIZ", "INT", "POW", "DEX", "CHA"];
@@ -529,9 +535,9 @@
       guard++;
       const affordable = CHARACTERISTICS.filter((c) => chars[c] < cap && POINT_BUY_COST[c] <= budget);
       if (affordable.length === 0) break;
-      const pick = affordable[Math.floor(rng() * affordable.length)];
-      chars[pick] += 1;
-      budget -= POINT_BUY_COST[pick];
+      const pick2 = affordable[Math.floor(rng() * affordable.length)];
+      chars[pick2] += 1;
+      budget -= POINT_BUY_COST[pick2];
     }
     return chars;
   }
@@ -712,7 +718,7 @@
     Art: ["Calligraphy", "Composing", "Conceptual Art", "Digital Art", "Drawing", "Painting", "Photography", "Poetry", "Sculpture", "Sketching", "Songwriting", "Writing"],
     Craft: ["Blacksmithing", "Carpentry", "Ceramics", "Cooking", "Leatherworking", "Locksmithing", "Metallurgy", "Stonemasonry"],
     Knowledge: ["Academic Lore", "Accounting", "Anthropology", "Archaeology", "Art History", "Blasphemous Lore", "Business", "Espionage", "Folklore", "History", "Law", "Linguistics", "Literature", "Occult", "Philosophy", "Politics", "Region", "Religion", "Streetwise"],
-    Language: ["Own Language", "Other Language"],
+    Language: ["Own", "Other"],
     Science: ["Astronomy", "Behavioral Science", "Biology", "Botany", "Chemistry", "Cryptography", "Genetics", "Geology", "Mathematics", "Meteorology", "Natural History", "Pharmacology", "Physics", "Planetology", "Psychology", "Quantum Mechanics", "Xenobiology", "Zoology"],
     "Technical Skill": ["Clockwork", "Computers", "Cybernetics", "Electronics", "Robotics", "Sensors", "Siege Engines", "Traps"],
     Etiquette: ["Business", "Court", "High Society", "Military", "Street"],
@@ -723,6 +729,72 @@
     "Heavy Machine": ["Armored Vehicle", "Boiler", "Bulldozer", "Crane", "Engine", "Locomotive", "Turbine"],
     Repair: ["Electrical", "Electronic", "Engineering", "Hydroelectric", "Mechanical", "Structural", "Quantum"]
   };
+  var SPECIALTY_ALIASES = {
+    Firearm: { Handgun: "Pistol" },
+    Language: { "Own Language": "Own", "Other Language": "Other" },
+    Perform: { Oratory: "Orate" },
+    Pilot: { Aircraft: "Airplane" },
+    Repair: { Electronics: "Electronic" },
+    Science: { Pharmacy: "Pharmacology" },
+    "Technical Skill": { "Computer Use": "Computers" }
+  };
+  var SPECIALTY_ERAS = {
+    Artillery: { Ballista: 1, Trebuchet: 2, Cannon: 3, "Vehicle-Mounted": 5 },
+    "Energy Weapon": { "Energy Pistol": 7, "Energy Rifle": 7 },
+    Firearm: { Pistol: 3, Rifle: 3, Shotgun: 3, Revolver: 4, "Machine Gun": 4, "Submachine Gun": 5 },
+    "Heavy Weapon": { Grenade: 5, Bazooka: 5, Flamethrower: 5, "Rocket Launcher": 5, "Mini Gun": 6 },
+    "Melee Weapon": { Sword: 1, Mace: 1, Polearm: 1, Hammer: 1, Flail: 2 },
+    "Missile Weapon": { Crossbow: 2 },
+    Parry: { Sword: 1, Mace: 1, Polearm: 1, Hammer: 1, Flail: 2 },
+    Shield: { Buckler: 1 },
+    Art: { Calligraphy: 1, Writing: 1, Photography: 4, "Conceptual Art": 5, "Digital Art": 6 },
+    Craft: { Blacksmithing: 1, Metallurgy: 1, Metalwork: 1, Locksmithing: 1, Photography: 4, "Computer Hardware or Code": 6 },
+    Knowledge: {
+      "Academic Lore": 1,
+      Accounting: 1,
+      Business: 1,
+      History: 1,
+      Law: 1,
+      Literature: 1,
+      Philosophy: 1,
+      Politics: 1,
+      "Natural History": 1,
+      Linguistics: 3,
+      "Art History": 3,
+      Anthropology: 4,
+      Archaeology: 4
+    },
+    Language: { "Other, a programming language": 6 },
+    Literacy: { Own: 1, Other: 1 },
+    Science: {
+      Astronomy: 1,
+      Botany: 1,
+      Cryptography: 1,
+      Mathematics: 1,
+      "Natural History": 1,
+      Biology: 3,
+      Chemistry: 3,
+      Physics: 3,
+      Zoology: 3,
+      Geology: 4,
+      Meteorology: 4,
+      Pharmacology: 4,
+      Psychology: 4,
+      "Behavioral Science": 5,
+      "Quantum Mechanics": 5,
+      Genetics: 6,
+      Planetology: 8,
+      Xenobiology: 8
+    },
+    "Technical Skill": { "Siege Engines": 1, Clockwork: 3, Electronics: 5, Sensors: 5, Computers: 6, Robotics: 6, Cybernetics: 7 },
+    Etiquette: { Business: 1, Court: 1, "High Society": 1, Military: 1, Street: 1 },
+    Perform: { "Conduct Orchestra": 3 },
+    Pilot: { Balloon: 3, Airship: 4, Airplane: 5, Submarine: 5, "Jet Aircraft": 5, Helicopter: 5, Hovercraft: 6, Jetpack: 7, Starship: 8 },
+    Drive: { Cart: 1, Chariot: 1, Carriage: 2, Sleigh: 2, Bicycle: 4, Automobile: 5, Motorcycle: 5, Truck: 5 },
+    Ride: { Camel: 1, Elephant: 1, Horse: 1 },
+    "Heavy Machine": { Crane: 1, Boiler: 4, Engine: 4, Locomotive: 4, "Armored Vehicle": 5, Bulldozer: 5, Turbine: 5 },
+    Repair: { Engineering: 1, Structural: 1, Mechanical: 2, Electrical: 4, Electronic: 5, Hydroelectric: 5, Quantum: 8 }
+  };
   var SKILLS = [
     { name: "Appraise", category: "Mental", base: "15", desc: "Estimate an object's worth." },
     { name: "Art", category: "Manipulation", base: "05", desc: "Create paintings, sculpture, music, and other art.", specialty: "open", specialtyKey: "Art" },
@@ -732,7 +804,7 @@
     { name: "Climb", category: "Physical", base: "40", desc: "Climb walls, trees, and cliffs." },
     { name: "Command", category: "Communication", base: "05", desc: "Inspire and direct subordinates." },
     { name: "Craft", category: "Manipulation", base: "05", desc: "Construct and build things by hand.", specialty: "open", specialtyKey: "Craft" },
-    { name: "Demolition", category: "Manipulation", base: "01", desc: "Store, transport, set, and detonate explosives with precision." },
+    { name: "Demolition", category: "Manipulation", base: "01", era: 3, desc: "Store, transport, set, and detonate explosives with precision." },
     { name: "Disguise", category: "Communication", base: "01", desc: "Appear as a different person via costume and makeup." },
     { name: "Dodge", category: "Physical", base: "DEX*2", desc: "Evade attacks." },
     { name: "Drive", category: "Physical", base: "20 or 01", desc: "Steer and control ground vehicles.", specialty: "open", specialtyKey: "Drive" },
@@ -764,7 +836,7 @@
     { name: "Persuade", category: "Communication", base: "15", desc: "Convince someone lastingly that an idea is correct." },
     { name: "Pilot", category: "Physical", base: "01", desc: "Steer and control air, water, or space vehicles.", specialty: "open", specialtyKey: "Pilot" },
     { name: "Projection", category: "Physical", base: "DEX*2", desc: "Target power-based attacks.", optionOnly: "powers" },
-    { name: "Psychotherapy", category: "Mental", base: "01 or 00", desc: "Evaluate and treat mental illness and trauma." },
+    { name: "Psychotherapy", category: "Mental", base: "01 or 00", era: 4, desc: "Evaluate and treat mental illness and trauma." },
     { name: "Repair", category: "Manipulation", base: "15", desc: "Fix damaged or broken equipment.", specialty: "open", specialtyKey: "Repair" },
     { name: "Research", category: "Perception", base: "25", desc: "Locate and identify information sources." },
     { name: "Ride", category: "Physical", base: "05", desc: "Ride, handle, and care for a specific animal type.", specialty: "open", specialtyKey: "Ride" },
@@ -795,12 +867,15 @@
     const [, base, specialty] = match;
     return { base: base.trim(), specialty: specialty.trim() };
   }
-  function specialtyOptionsFor(base) {
+  function specialtyOptionsFor(base, era2 = null) {
     const skillDef = findSkill(base);
     const key = skillDef?.specialtyKey ?? base;
-    if (WEAPON_CLASSES[key]) return WEAPON_CLASSES[key];
-    if (OPEN_SPECIALTY_SKILLS[key]) return OPEN_SPECIALTY_SKILLS[key];
-    return null;
+    const options = WEAPON_CLASSES[key] ?? OPEN_SPECIALTY_SKILLS[key] ?? null;
+    if (!options || era2 == null) return options;
+    return options.filter((o) => (SPECIALTY_ERAS[base]?.[o] ?? 0) <= era2);
+  }
+  function canonicalSpecialty(base, specialty) {
+    return SPECIALTY_ALIASES[base]?.[specialty] ?? specialty;
   }
   function isOpenSpecialtyText(specialty) {
     return specialty == null || /^any$/i.test(specialty) || /^various$/i.test(specialty);
@@ -814,17 +889,18 @@
     const options = specialtyOptionsFor(base);
     return Boolean(options && options.length > 0);
   }
-  function resolveSkillDisplayName(ref, rng = Math.random) {
+  function resolveSkillDisplayName(ref, rng = Math.random, era2 = null) {
     const { base, specialty, wildcard } = parseSkillRef(ref);
     if (wildcard) return null;
     const skillDef = findSkill(base);
     if (!skillDef) return ref;
     if (!skillDef.specialty) return base;
-    if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
-    const pool = specialtyOptionsFor(base);
+    if (!isOpenSpecialtyText(specialty)) return `${base} (${canonicalSpecialty(base, specialty)})`;
+    const fitting = specialtyOptionsFor(base, era2);
+    const pool = fitting?.length ? fitting : specialtyOptionsFor(base);
     if (!pool || pool.length === 0) return base;
-    const pick = pool[Math.floor(rng() * pool.length)];
-    return `${base} (${pick})`;
+    const pick2 = pool[Math.floor(rng() * pool.length)];
+    return `${base} (${pick2})`;
   }
   function resolveSkillDisplayNameManual(ref, chosenSpecialty) {
     const { base, specialty, wildcard } = parseSkillRef(ref);
@@ -832,9 +908,9 @@
     const skillDef = findSkill(base);
     if (!skillDef) return ref;
     if (!skillDef.specialty) return base;
-    if (!isOpenSpecialtyText(specialty)) return `${base} (${specialty})`;
+    if (!isOpenSpecialtyText(specialty)) return `${base} (${canonicalSpecialty(base, specialty)})`;
     if (!chosenSpecialty) return null;
-    return `${base} (${chosenSpecialty})`;
+    return `${base} (${canonicalSpecialty(base, chosenSpecialty)})`;
   }
   function baseSkillName(displayName) {
     return parseSkillRef(displayName).base ?? displayName;
@@ -877,6 +953,95 @@
     return errors;
   }
 
+  // js/data/settings.js
+  var PRE_MODERN_EXCEPT = { except: ["Journalist", "Scientist", "Technician"] };
+  var SETTINGS = [
+    { id: "any", name: "Any (no setting filter)", era: null, professions: null },
+    { id: "prehistoric", name: "Prehistoric Age", page: 205, era: 0, professions: { only: ["Crafter", "Farmer", "Hunter", "Shaman", "Tribesperson"] } },
+    { id: "ancient", name: "Ancient World", page: 205, era: 1, professions: PRE_MODERN_EXCEPT },
+    { id: "early-medieval", name: "Early Medieval", page: 206, era: 2, professions: PRE_MODERN_EXCEPT },
+    { id: "high-medieval", name: "High Medieval", page: 206, era: 2, professions: PRE_MODERN_EXCEPT },
+    { id: "high-fantasy", name: "High Fantasy", page: 206, era: 2, professions: PRE_MODERN_EXCEPT },
+    { id: "imperial-asia", name: "Imperial Asia", page: 206, era: 2, professions: PRE_MODERN_EXCEPT },
+    { id: "arabian-nights", name: "Arabian Nights", page: 206, era: 2, professions: PRE_MODERN_EXCEPT },
+    { id: "renaissance", name: "Enlightenment and Renaissance", page: 206, era: 3, professions: null },
+    { id: "exploration", name: "Age of Exploration", page: 207, era: 3, professions: null },
+    { id: "sail", name: "Age of Sail", page: 207, era: 3, professions: null },
+    { id: "industrial", name: "Industrial Age", page: 207, era: 4, professions: null },
+    { id: "victorian", name: "Victorian Age", page: 207, era: 4, professions: null },
+    { id: "wild-west", name: "Wild West", page: 207, era: 4, professions: null },
+    { id: "pulp", name: "Pulp Era", page: 208, era: 5, professions: null },
+    { id: "planetary", name: "Planetary Adventure", page: 208, era: 8, professions: null },
+    { id: "ww2", name: "World War II", page: 208, era: 5, professions: null },
+    { id: "noir", name: "Noir", page: 208, era: 5, professions: null },
+    { id: "modern", name: "Modern", page: 208, era: 6, professions: null },
+    { id: "superworld", name: "Superworld", page: 208, era: 6, professions: null },
+    { id: "postapocalyptic", name: "Postapocalyptic", page: 209, era: 6, professions: null },
+    { id: "near-future", name: "Near-Future/Cyberpunk", page: 209, era: 7, professions: null },
+    { id: "space-exploration", name: "Space Exploration", page: 209, era: 8, professions: null },
+    { id: "space-opera", name: "Space Opera", page: 210, era: 8, professions: null }
+  ];
+  var PROFESSION_MIN_ERA = { "Computer Tech": 6 };
+  function findSetting(id) {
+    return SETTINGS.find((s) => s.id === id) ?? SETTINGS[0];
+  }
+
+  // js/engine/settingFilter.js
+  function settingEra(settingId) {
+    return findSetting(settingId).era ?? null;
+  }
+  function skillEra(name) {
+    const { base, specialty } = parseSkillRef(name);
+    const def = findSkill(base);
+    let era2 = def?.era ?? 0;
+    if (specialty && /^(any|various)$/i.test(specialty)) return Math.max(era2, minSpecialtyEra(base));
+    if (specialty) era2 = Math.max(era2, SPECIALTY_ERAS[base]?.[canonicalSpecialty(base, specialty)] ?? 0);
+    else if (def?.specialty) era2 = Math.max(era2, minSpecialtyEra(base));
+    return era2;
+  }
+  function minSpecialtyEra(base) {
+    const options = specialtyOptionsFor(base) ?? [];
+    if (!options.length) return 0;
+    return Math.min(...options.map((o) => SPECIALTY_ERAS[base]?.[o] ?? 0));
+  }
+  function skillFits(name, era2) {
+    return era2 == null || skillEra(name) <= era2;
+  }
+  function fittingSpecialties(base, era2) {
+    return specialtyOptionsFor(base, era2) ?? [];
+  }
+  function professionsForSetting(settingId) {
+    const setting = findSetting(settingId);
+    return PROFESSIONS.filter((p) => {
+      const rule = setting.professions;
+      if (rule?.only && !rule.only.includes(p.name)) return false;
+      if (rule?.except && rule.except.includes(p.name)) return false;
+      return setting.era == null || (PROFESSION_MIN_ERA[p.name] ?? 0) <= setting.era;
+    });
+  }
+  function substituteOptions(name, era2, taken = /* @__PURE__ */ new Set()) {
+    if (skillFits(name, era2)) return [];
+    const { base } = parseSkillRef(name);
+    const sameBase = fittingSpecialties(base, era2).map((s) => `${base} (${s})`).filter((n) => !taken.has(n));
+    if (sameBase.length) return sameBase;
+    const category = findSkill(base)?.category;
+    const out = [];
+    for (const skill of SKILLS) {
+      if (skill.category !== category || skill.name === base || skill.optionOnly) continue;
+      if (skill.specialty) {
+        for (const s of fittingSpecialties(skill.name, era2)) out.push(`${skill.name} (${s})`);
+      } else if (skillFits(skill.name, era2)) {
+        out.push(skill.name);
+      }
+    }
+    return out.filter((n) => !taken.has(n));
+  }
+  function substituteSkill(name, era2, rng = Math.random, taken = /* @__PURE__ */ new Set()) {
+    const options = substituteOptions(name, era2, taken);
+    if (!options.length) return name;
+    return options[Math.floor(rng() * options.length)];
+  }
+
   // js/engine/professionSkills.js
   function pickRandomDistinct(pool, count, exclude, rng) {
     const available = pool.filter((item) => !exclude.has(item));
@@ -890,21 +1055,26 @@
   }
   function uniqueName(name, resolved) {
     if (!resolved.has(name)) return name;
+    const numbered = (n) => /\)$/.test(name) ? name.replace(/\)$/, ` ${n})`) : `${name} ${n}`;
     let suffix = 2;
-    while (resolved.has(`${name} #${suffix}`)) suffix++;
-    return `${name} #${suffix}`;
+    while (resolved.has(numbered(suffix))) suffix++;
+    return numbered(suffix);
   }
-  function resolveProfessionSkills(profession, rng = Math.random) {
+  function alreadyResolvedRefs(pool, resolved) {
+    return new Set(pool.filter((ref) => !refNeedsSpecialtyChoice(ref) && resolved.has(resolveSkillDisplayName(ref))));
+  }
+  function resolveProfessionSkills(profession, rng = Math.random, era2 = null) {
     const resolved = /* @__PURE__ */ new Set();
     const displayNames = [];
     const addRef = (ref) => {
-      let name = resolveSkillDisplayName(ref, rng);
+      let name = resolveSkillDisplayName(ref, rng, era2);
       if (!name) return null;
       let attempts = 0;
       while (resolved.has(name) && attempts < 20) {
-        name = resolveSkillDisplayName(ref, rng);
+        name = resolveSkillDisplayName(ref, rng, era2);
         attempts++;
       }
+      if (!skillFits(name, era2)) name = substituteSkill(name, era2, rng, resolved);
       name = uniqueName(name, resolved);
       resolved.add(name);
       displayNames.push(name);
@@ -913,24 +1083,33 @@
     for (const ref of profession.fixed) addRef(ref);
     for (const choice of profession.choices ?? []) {
       if (choice.from.length === 1 && /^Any skill/i.test(choice.from[0])) {
-        const allSkillNames = SKILLS.map((s) => s.name).filter((n) => !resolved.has(n));
+        const allSkillNames = SKILLS.map((s) => s.name).filter((n) => !resolved.has(n) && skillFits(n, era2));
         const picks2 = pickRandomDistinct(allSkillNames, choice.count, resolved, rng);
         for (const base of picks2) addRef(base);
         continue;
       }
-      const picks = choice.from.length >= choice.count ? pickRandomDistinct(choice.from, choice.count, /* @__PURE__ */ new Set(), rng) : Array.from({ length: choice.count }, () => choice.from[Math.floor(rng() * choice.from.length)]);
+      const repeats = alreadyResolvedRefs(choice.from, resolved);
+      const unfit = new Set(choice.from.filter((ref) => !skillFits(ref, era2)));
+      const avoid = /* @__PURE__ */ new Set([...repeats, ...unfit]);
+      const picks = choice.from.length - avoid.size >= choice.count ? pickRandomDistinct(choice.from, choice.count, avoid, rng) : choice.from.length - repeats.size >= choice.count ? pickRandomDistinct(choice.from, choice.count, repeats, rng) : choice.from.length >= choice.count ? pickRandomDistinct(choice.from, choice.count, /* @__PURE__ */ new Set(), rng) : Array.from({ length: choice.count }, () => choice.from[Math.floor(rng() * choice.from.length)]);
       for (const ref of picks) addRef(ref);
     }
     return displayNames;
   }
-  function resolveProfessionSkillsManual(profession, choiceSelections, specialtyChoices = {}) {
+  function resolveProfessionSkillsManual(profession, choiceSelections, specialtyChoices = {}, { era: era2 = null, substitutions = {} } = {}) {
     const errors = validateAllChoiceSelections(profession, choiceSelections);
     if (errors.length > 0) throw new Error(errors.join(" "));
     const resolved = /* @__PURE__ */ new Set();
     const displayNames = [];
     const addRef = (ref) => {
-      let name = refNeedsSpecialtyChoice(ref) ? resolveSkillDisplayNameManual(ref, specialtyChoices[ref]) : resolveSkillDisplayNameManual(ref, null);
+      const open = refNeedsSpecialtyChoice(ref);
+      let name = open && era2 != null && !fittingSpecialties(parseSkillRef(ref).base, era2).length ? ref : resolveSkillDisplayNameManual(ref, open ? specialtyChoices[ref] : null);
       if (!name) throw new Error(`Missing specialty choice for "${ref}".`);
+      if (!skillFits(name, era2)) {
+        const sub = substitutions[ref];
+        if (!sub || !skillFits(sub, era2)) throw new Error(`"${name}" does not fit this setting: choose a substitute.`);
+        name = sub;
+      }
       name = uniqueName(name, resolved);
       resolved.add(name);
       displayNames.push(name);
@@ -1022,12 +1201,13 @@
 
   // js/engine/skillSheet.js
   function baselineSkillEntries(chars, options = {}) {
-    const { useCategoryBonus = false, categoryBonusMethod = "full", usePowers = false } = options;
+    const { useCategoryBonus = false, categoryBonusMethod = "full", usePowers = false, era: era2 = null } = options;
     const categoryBonuses = useCategoryBonus ? computeCategoryBonuses(chars, categoryBonusMethod) : null;
     const entries = {};
     for (const skill of SKILLS) {
       if (skill.specialty) continue;
       if (skill.optionOnly === "powers" && !usePowers) continue;
+      if (!skillFits(skill.name, era2)) continue;
       const candidates = evaluateSkillFormula(skill.base, chars);
       const base = candidates[skill.formulaDefaultIndex ?? 0];
       entries[skill.name] = {
@@ -1149,30 +1329,39 @@
   function rollPersonalityType(rng = Math.random) {
     return findPersonalityType(rollDie(4, rng));
   }
-  function resolvePersonalitySkills(personality, rng = Math.random) {
-    const names = new Set(personality.skills);
+  function resolvePersonalitySkills(personality, rng = Math.random, era2 = null) {
+    const names = /* @__PURE__ */ new Set();
+    for (const ref of personality.skills) {
+      const name = resolveSkillDisplayName(ref, rng, era2);
+      names.add(skillFits(name, era2) ? name : substituteSkill(name, era2, rng, names));
+    }
     for (const [choiceKey, base] of Object.entries(CRAFT_LIKE)) {
       const count = personality[choiceKey];
       if (!count) continue;
       for (let i = 0; i < count; i++) {
-        const display = resolveSkillDisplayName(`${base} (any)`, rng);
+        const display = resolveSkillDisplayName(`${base} (any)`, rng, era2);
         if (display) names.add(display);
       }
     }
     if (personality.combatChoices) {
       const usedBases = new Set([...names].map(baseSkillName));
-      const pool = COMBAT_SKILL_NAMES.filter((n) => !usedBases.has(n));
+      const pool = COMBAT_SKILL_NAMES.filter((n) => !usedBases.has(n) && skillFits(n, era2));
       for (let i = 0; i < personality.combatChoices && pool.length > 0; i++) {
         const idx = Math.floor(rng() * pool.length);
         const baseName = pool.splice(idx, 1)[0];
-        const display = resolveSkillDisplayName(baseName, rng);
+        const display = resolveSkillDisplayName(baseName, rng, era2);
         if (display) names.add(display);
       }
     }
     return [...names];
   }
   function resolvePersonalitySkillsManual(personality, picks = {}) {
-    const names = new Set(personality.skills);
+    const names = new Set(personality.skills.map((ref) => {
+      if (!refNeedsSpecialtyChoice(ref)) return resolveSkillDisplayNameManual(ref, null);
+      const display = resolveSkillDisplayNameManual(ref, picks.fixedSpecialties?.[ref]);
+      if (!display) throw new Error(`${ref}: choose a specialty.`);
+      return display;
+    }));
     for (const [choiceKey, base] of Object.entries(CRAFT_LIKE)) {
       const required = personality[choiceKey] ?? 0;
       if (required === 0) continue;
@@ -1352,7 +1541,9 @@
       id: "sorcery",
       name: "Sorcery",
       description: "Short magical incantations that cause a supernatural effect automatically, except when successfully resisted. A sorcerer can change memorized spells day to day.",
-      resistance: "POW"
+      resistance: "POW",
+      minPOW: 16
+      // "To be able to cast sorcery spells, a sorcerer must have POW 16+" (p. 78)
     },
     {
       id: "superpowers",
@@ -1367,34 +1558,291 @@
   function powerSetOptionsFor(campaignPowerLevel) {
     return POWER_SETS_BY_LEVEL[campaignPowerLevel] ?? POWER_SETS_BY_LEVEL.Normal;
   }
+  var STARTING_MAGIC_SPELLS = { Normal: 4, Heroic: 6, Epic: 8, Superhuman: 10 };
+  var STARTING_MAGIC_EXTRAS = {
+    Normal: [],
+    Heroic: [],
+    Epic: ["Familiar (optional)"],
+    Superhuman: ["Wizard's staff (already constructed)", "Familiar"]
+  };
+  var MAGIC_SPELLS = [
+    { name: "Blast", cost: 3, summary: "Ranged, does 1D6 points of magical damage per level." },
+    { name: "Change", cost: 1, summary: "Transforms 3 SIZ points of an item or being per level." },
+    { name: "Conjure Elemental", cost: 1, summary: "Summons or dismisses an elemental of a specific type." },
+    { name: "Control", cost: 3, summary: "Allows control over a target's mind, requires a resistance roll." },
+    { name: "Countermagic", cost: 1, summary: "Reflects incoming spells back at the magician." },
+    { name: "Dark", cost: 1, summary: "Fills an area with darkness." },
+    { name: "Diminish", cost: 1, summary: "Reduces one of the target's characteristics by 1 per level." },
+    { name: "Dispel", cost: 1, summary: "Eliminates existing spell effects, may banish supernatural beings." },
+    { name: "Dull", cost: 1, summary: "Reduces a weapon's attack chance and damage." },
+    { name: "Enhance", cost: 1, summary: "Increases one of the target's characteristics by 1 per level." },
+    { name: "Fire", cost: 3, summary: "Ranged, does 1D6 points of fire damage per level." },
+    { name: "Frost", cost: 3, summary: "Ranged, does 1D6 points of frost damage per level." },
+    { name: "Heal", cost: 3, summary: "Heals 1D6 points of damage per level." },
+    { name: "Illusion", cost: 1, summary: "Creates 3 SIZ points of an illusion per level." },
+    { name: "Invisibility", cost: 1, summary: "Each level makes 3 SIZ points of an object or person invisible." },
+    { name: "Lift", cost: 1, summary: "Lifts 3 SIZ points of an object or person per level." },
+    { name: "Light", cost: 1, summary: "Fills an area with light." },
+    { name: "Lightning", cost: 3, summary: "Ranged, does 1D6 points of lightning damage per level." },
+    { name: "Perception", cost: 1, summary: "Allows the magician to detect one thing within range." },
+    { name: "Protection", cost: 1, summary: "Adds 1 point of armor value per level against physical attacks." },
+    { name: "Resistance", cost: 1, summary: "Reduces damage from heat and/or cold by 1 point per level." },
+    { name: "Seal", cost: 1, summary: "Joins two inanimate objects together." },
+    { name: "Sharpen", cost: 1, summary: "Increases a weapon's attack chance and damage." },
+    { name: "Speak to Mind", cost: 1, summary: "Allows mental communication between the magician and a target." },
+    { name: "Teleport", cost: 1, summary: "Teleports 3 SIZ points per level anywhere within range." },
+    { name: "Unseal", cost: 1, summary: "Separates two connected objects." },
+    { name: "Vision", cost: 1, summary: "Allows the magician to see what is happening elsewhere, or in the past." },
+    { name: "Wall", cost: 1, summary: "Creates a barrier to protect your character." },
+    { name: "Ward", cost: 1, summary: "Defines an area protected by Blast and Countermagic." },
+    { name: "Wounding", cost: 3, summary: "Causes 1D6 points of damage per level." }
+  ];
+  var MUTATIONS = [
+    { min: 1, max: 3, name: "Adaptability", summary: "Survival in unusual environments." },
+    { min: 4, max: 5, name: "Allergy", adverse: true, summary: "Skills reduced by contact to an allergen." },
+    { min: 6, max: 9, name: "Biped (Quadruped)", adverse: true, summary: "If two-legged, forced to walk four-legged." },
+    { min: 10, max: 12, name: "Camouflage", summary: "Skin has a concealing texture or color." },
+    { min: 13, max: 15, name: "Coloration", minorOnly: true, summary: "Unusual coloration (minor only)." },
+    { min: 16, max: 19, name: "Congenital Disease", adverse: true, summary: "Suffers from a debilitating disease." },
+    { min: 20, max: 22, name: "Decreased Characteristic", adverse: true, summary: "Characteristic decreased." },
+    { min: 23, max: 25, name: "Disease Carrier", adverse: true, summary: "Carries (but is immune to) an infectious disease." },
+    { min: 26, max: 29, name: "Group Intelligence", summary: "Part of a hive mind." },
+    { min: 30, max: 30, name: "Hands", summary: "Has extra hands or prehensile limb." },
+    { min: 31, max: 33, name: "Hardy", summary: "Resistant to damage." },
+    { min: 34, max: 35, name: "Hybrid", summary: "Has an animalistic trait." },
+    { min: 36, max: 37, name: "Imitation", summary: "Imitates an animal's natural trait." },
+    { min: 38, max: 44, name: "Increased Characteristic", summary: "Characteristic increased." },
+    { min: 45, max: 48, name: "Keen Sense", summary: "Has one or more sharp senses." },
+    { min: 49, max: 50, name: "Luminescence", summary: "Emits a light from body." },
+    { min: 51, max: 53, name: "Metabolic Improvement", summary: "Has a beneficial but unusual metabolism." },
+    { min: 54, max: 57, name: "Metabolic Weakness", adverse: true, summary: "Has a disadvantageous and unusual metabolism." },
+    { min: 58, max: 60, name: "Natural Armor", summary: "Has natural armor (scales, horn, hide, etc.)." },
+    { min: 61, max: 65, name: "Natural Weaponry", summary: "Has natural weapon (spine, claw, teeth, etc.)." },
+    { min: 66, max: 67, name: "Pain Sensitivity", adverse: true, summary: "Low resistance to pain." },
+    { min: 68, max: 68, name: "Pheromone", summary: "Emits chemicals that can affect others." },
+    { min: 69, max: 70, name: "Reduced Sense", adverse: true, summary: "Impaired or missing primary sense." },
+    { min: 71, max: 72, name: "Regeneration", summary: "Able to heal rapidly." },
+    { min: 73, max: 74, name: "Sensitivity", summary: "Has an unusual affinity for a substance." },
+    { min: 75, max: 76, name: "Speech (Mimicry)", summary: "Can imitate animal noises or speak clearly." },
+    { min: 77, max: 81, name: "Structural Improvement", summary: "Has an unusual and beneficial body form." },
+    { min: 82, max: 86, name: "Structural Weakness", adverse: true, summary: "Has an unusual and disadvantageous body form." },
+    { min: 87, max: 89, name: "Venom", summary: "Emits a natural poison." },
+    { min: 90, max: 90, name: "Wings", summary: "Has wings and can glide or fly." }
+  ];
+  function findMutation(name) {
+    return MUTATIONS.find((m) => m.name === name);
+  }
+  function mutationForRoll(roll) {
+    return MUTATIONS.find((m) => roll >= m.min && roll <= m.max) ?? null;
+  }
+  var STARTING_PSYCHIC_ABILITIES = { Normal: 2, Heroic: 4, Epic: 6, Superhuman: 10 };
+  var PSYCHIC_ABILITIES = [
+    { name: "Astral Projection", summary: "Leave physical body and travel in psychic form." },
+    { name: "Aura Detection", summary: "Perceive the aura emanated by a living being." },
+    { name: "Clairvoyance", summary: "Project awareness into another place." },
+    { name: "Cryokinesis", summary: "Create an area of intense cold on an area, object, or target." },
+    { name: "Danger Sense", summary: "Detect danger from other characters or situations." },
+    { name: "Dead Calm", summary: "Resist mental shock or delay the effects of sanity loss." },
+    { name: "Divination", summary: "Ask a higher power for guidance and insight." },
+    { name: "Eidetic Memory", summary: "Perfect and total recall of previous experiences." },
+    { name: "Emotion Control", summary: "Affect the emotional state of a target or targets." },
+    { name: "Empathy", summary: "Detect the inner feelings of a target or targets." },
+    { name: "Intuition", summary: "Detect a certain person or class of item." },
+    { name: "Levitation", summary: "Floating movement above the ground." },
+    { name: "Mind Blast", summary: "A psychic attack against a target." },
+    { name: "Mind Control", summary: "Controlling the physical body and will of a target." },
+    { name: "Mind Shield", summary: "A protection against psychic interference and attacks." },
+    { name: "Precognition", summary: "A brief glimpse into the future." },
+    { name: "Psychometry", summary: "'Read' past emotions associated with an object or place." },
+    { name: "Pyrokinesis", summary: "Heat an area, object, or target to extreme temperatures." },
+    { name: "Sensitivity", summary: "Detect psychic emanations or supernatural beings in an area." },
+    { name: "Telekinesis", summary: "Manipulate and move objects mentally." },
+    { name: "Telepathy", summary: "Read minds or speak mind-to-mind with a target." }
+  ];
+  var SORCERY_SPELLS = [
+    { name: "Cloak of Night", category: "Augmentation", min: 1, max: 4, summary: "Adds +20% per level to Hide." },
+    { name: "Leap", category: "Augmentation", min: 1, max: 4, summary: "Adds +20% per level to Jump." },
+    { name: "Sureness", category: "Augmentation", min: 1, max: 4, summary: "Adds +20% per level to Stealth." },
+    { name: "Bolster the Soul", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to POW." },
+    { name: "Inhuman Plasticity", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to SIZ." },
+    { name: "Lightning Speed", category: "Characteristic", min: 1, max: 3, summary: "Adds 1 point per level to MOV." },
+    { name: "Relentless Vitality", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to CON." },
+    { name: "Suppleness of the Serpent", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to DEX." },
+    { name: "Titan's Strength", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to STR." },
+    { name: "Unearthly Beauty", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to CHA." },
+    { name: "Wisdom of the Sage", category: "Characteristic", min: 1, max: 3, summary: "Adds 3 points per level to INT." },
+    { name: "Hammer of the Gods", category: "Combat", min: 1, max: 4, summary: "Adds 1 point damage per level to blunt weapons." },
+    { name: "Hell's Razor", category: "Combat", min: 1, max: 4, summary: "Adds 1 point damage per level to cutting weapons." },
+    { name: "Sorcery's Sharp Flame", category: "Combat", min: 1, max: 4, summary: "Adds 1 point damage per level to impaling weapons." },
+    { name: "Sorcerous Armor", category: "Combat", min: 1, max: 4, summary: "Adds 1 point of armor per level." },
+    { name: "Talons of the Beast", category: "Combat", min: 1, max: 4, summary: "Adds 1 point damage per level to unarmed or brawling weapons." },
+    { name: "Unbreakable Bulwark", category: "Combat", min: 1, max: 4, summary: "Adds 1 point of armor per level to shields." },
+    { name: "Make Fast", category: "Enhancement", min: 1, max: 1, summary: "Glues together two inanimate objects." },
+    { name: "Make Whole", category: "Enhancement", min: 3, max: 3, summary: "Repairs a broken item." },
+    { name: "Midnight", category: "Enhancement", min: 1, max: 1, summary: "Creates an area of darkness." },
+    { name: "Moonrise", category: "Enhancement", min: 1, max: 1, summary: "Creates a floating globe of light." },
+    { name: "Bounty of the Sea", category: "Elemental", min: 4, max: 4, summary: "Fills an area with water." },
+    { name: "Fires of the Sun", category: "Elemental", min: 4, max: 4, summary: "Fills an area with flame." },
+    { name: "Gift of the Earth", category: "Elemental", min: 4, max: 4, summary: "Fills an area with dirt." },
+    { name: "Wings of the Sky", category: "Elemental", min: 4, max: 4, summary: "Fills an area with wind." },
+    { name: "Curse of Sorcery", category: "Manipulative", min: 4, max: 4, summary: "Causes target to suffer a disfiguring feature." },
+    { name: "Fury", category: "Manipulative", min: 1, max: 1, summary: "Enrages target, speeding their attacks." },
+    { name: "Inescapable Bonds", category: "Manipulative", min: 3, max: 3, summary: "Immobilizes target, requires a resistance roll." },
+    { name: "Liken Shape", category: "Manipulative", min: 4, max: 4, summary: "Assume the image of another person." },
+    { name: "Muddle", category: "Manipulative", min: 1, max: 1, summary: "Disorients target." },
+    { name: "Pox", category: "Manipulative", min: 1, max: 1, summary: "Reduces target's power points, requires a resistance roll." },
+    { name: "Brazier of Power", category: "Occult", min: 4, max: 4, summary: "Creates a reservoir of power points." },
+    { name: "Chain of Being", category: "Occult", min: 4, max: 4, summary: "Creates a pool of power points." },
+    { name: "Undo Sorcery", category: "Occult", min: 1, max: 4, summary: "Cancels various sorcery spells." },
+    { name: "Ward", category: "Occult", min: 3, max: 3, summary: "Creates a magical alarm." },
+    { name: "Summon Demon", category: "Summoning", min: 1, max: 1, summary: "Summons a demon." },
+    { name: "Summon Elemental", category: "Summoning", min: 1, max: 1, summary: "Summons an elemental." },
+    { name: "Bird's Vision", category: "Utility", min: 1, max: 1, summary: "Controls a bird and sees through its eyes." },
+    { name: "Breath of Life", category: "Utility", min: 1, max: 1, summary: "Provides breathable air underwater or elsewhere." },
+    { name: "Farsight", category: "Utility", min: 1, max: 1, summary: "Doubles range at which something can be seen." },
+    { name: "Heal", category: "Utility", min: 2, max: 2, summary: "Restores lost hit points." },
+    { name: "Keen Ear", category: "Utility", min: 1, max: 1, summary: "Carries spoken words across great distances." },
+    { name: "Refutation", category: "Utility", min: 1, max: 4, summary: "Protects against Undo Sorcery." },
+    { name: "Vermin's Vision", category: "Utility", min: 1, max: 1, summary: "Controls vermin and sees through its eyes." },
+    { name: "Witch Sight", category: "Utility", min: 3, max: 3, summary: "Determines target's POW." }
+  ];
+  function findSorcerySpell(name) {
+    return SORCERY_SPELLS.find((s) => s.name === name);
+  }
+  function sorcerySpellLevelBudget(campaignPowerLevel, int) {
+    switch (campaignPowerLevel) {
+      case "Heroic":
+        return int;
+      case "Epic":
+        return int * 2;
+      case "Superhuman":
+        return int * 4;
+      default:
+        return Math.ceil(int / 2);
+    }
+  }
+  var ENERGY_TYPES = ["Cold", "Darkness", "Electric", "Gravity", "Heat", "Kinetic", "Light", "Magnetic", "Radiation", "Sound", "Wind"];
+  var ADAPTATION_ENVIRONMENTS = ["Cold", "Corrosive", "Heat", "High Gravity", "High Pressure", "Low Gravity", "Radiation", "Underwater", "Vacuum"];
+  var SUPER_MOVEMENT_TYPES = ["Air Walking", "Irresistible", "Lightfoot", "Trackless", "Wall Walking", "Water Walking", "Zero-gravity"];
+  var SUPER_SENSE_TYPES = ["Dark Vision", "Microscopic Vision", "Night Vision", "Sonar Detection", "Super Hearing", "Super Smell/Taste", "Super Touch", "Super Vision"];
+  var SUPERPOWERS = [
+    { name: "Absorption", cost: 3, specify: ENERGY_TYPES, summary: "Absorb energy from an attack and turn it into power points." },
+    { name: "Adaptation", cost: 3, specify: ADAPTATION_ENVIRONMENTS, specifyPerLevel: true, summary: "Each level allows survival in one hostile environment." },
+    { name: "Alternate Form", cost: 20, perLevelLabel: "form", summary: "Each level is an alternate body to switch into." },
+    { name: "Armor", cost: 1, specify: ENERGY_TYPES, summary: "Each level provides 1 point of protection against a specific energy type." },
+    { name: "Barrier", cost: 3, summary: "Each level creates a 1-meter-square section of protective wall." },
+    { name: "Defense", cost: 1, summary: "Lowers the chance to be hit by -1% per level." },
+    { name: "Density Control", cost: 1, summary: "Each level adds or subtracts 1 point of density (SIZ)." },
+    { name: "Diminish/Enhance Characteristic", cost: 5, summary: "Lowers or increases a characteristic by 1D6 per level." },
+    {
+      name: "Drain",
+      variants: [{ name: "Hit Points", cost: 10 }, { name: "Power Points", cost: 5 }, { name: "Fatigue Points", cost: 5 }, { name: "Sanity Points", cost: 5 }],
+      summary: "Each level drains 1 hit point, power point, fatigue point, or sanity point from a target."
+    },
+    { name: "Energy Control", cost: 3, specify: ENERGY_TYPES, summary: "Allows creation of and control over a specific energy type." },
+    { name: "Energy Projection", cost: 10, specify: ENERGY_TYPES, summary: "Allows projection of a focused beam of damaging energy." },
+    { name: "Extra Energy", cost: 1, summary: "Each level provides +10 additional power points." },
+    { name: "Extra Hit Points", cost: 1, summary: "Each level provides +1 additional hit point." },
+    { name: "Flight", cost: 1, summary: "Each level allows self-powered flight for 1 SIZ point." },
+    { name: "Force Field", cost: 1, costPerSIZ: true, specify: ENERGY_TYPES, summary: "Each level offers 10 points of armor against a specific type of energy." },
+    { name: "Intangibility", cost: 2, summary: "Allows movement through solid objects." },
+    { name: "Invisibility", cost: 1, summary: "Each level turns 1 SIZ point invisible." },
+    { name: "Leap", cost: 1, summary: "Adds to the normal jumping distance, horizontally and vertically." },
+    { name: "Protection", cost: 1, specify: ENERGY_TYPES, summary: "Each level reduces the level of an attacking energy type." },
+    { name: "Regeneration", cost: 3, summary: "Each level returns 1 lost hit point per combat round." },
+    {
+      name: "Resistance",
+      variants: [{ name: "Turn-based", cost: 1 }, { name: "Permanent", cost: 3 }],
+      specify: ENERGY_TYPES,
+      summary: "Each level resists 1 point of damage from a single energy type."
+    },
+    { name: "Size Change", cost: 1, summary: "Each level adds or subtracts 1 point of SIZ." },
+    { name: "Snare Projection", cost: 1, summary: "Each level is 1 STR and/or SIZ of a net, web, rope, or other confining snare." },
+    { name: "Stretching", cost: 3, summary: "Stretch body into different sizes and shapes." },
+    {
+      name: "Super Characteristic",
+      variants: [
+        { name: "STR", cost: 1 },
+        { name: "CON", cost: 1 },
+        { name: "SIZ", cost: 1 },
+        { name: "CHA", cost: 1 },
+        { name: "DEX", cost: 3 },
+        { name: "INT", cost: 3 },
+        { name: "POW", cost: 3 },
+        { name: "EDU", cost: 3 }
+      ],
+      summary: "Each level adds +1 to one characteristic."
+    },
+    { name: "Super Movement", cost: 10, specify: SUPER_MOVEMENT_TYPES, maxLevel: 1, summary: "Each type involves a unique method of movement." },
+    { name: "Super Sense", cost: 3, specify: SUPER_SENSE_TYPES, summary: "Each type improves an existing sense or adds an extraordinary aspect to the sense." },
+    { name: "Super Skill", cost: 2, specify: "skill", summary: "Each level adds +20% to a specific skill." },
+    { name: "Super Speed", cost: 20, summary: "Each level adds an additional action or movement each combat round." },
+    { name: "Teleport", cost: 1, summary: "Each level allows instantaneous teleportation of 1 SIZ point of an object or target." },
+    {
+      name: "Transfer",
+      variants: [{ name: "Hit Points", cost: 3 }, { name: "Power Points", cost: 1 }, { name: "Fatigue Points", cost: 1 }, { name: "Sanity Points", cost: 1 }],
+      summary: "Each level allows transfer of 1 hit point, power point, fatigue point, or sanity point to a target."
+    },
+    { name: "Unarmed Combat", cost: 20, summary: "Increases ability in unarmed combat." },
+    { name: "Weather Control", cost: 3, summary: "Alters or creates weather in an area." }
+  ];
+  function findSuperpower(name) {
+    return SUPERPOWERS.find((p) => p.name === name);
+  }
+  function superpowerPointBudget(campaignPowerLevel, characteristics) {
+    const values = Object.values(characteristics).filter((v) => typeof v === "number");
+    const highest = Math.max(...values);
+    switch (campaignPowerLevel) {
+      case "Heroic":
+        return highest;
+      case "Epic":
+        return highest * 2;
+      case "Superhuman":
+        return values.reduce((sum, v) => sum + v, 0);
+      default:
+        return Math.ceil(highest / 2);
+    }
+  }
+  function mutationPickRules(campaignPowerLevel, con) {
+    switch (campaignPowerLevel) {
+      case "Heroic":
+        return { picks: Math.max(2, Math.ceil(con / 4)), maxAdverse: Math.ceil(con / 4), adverseBuysPicks: true };
+      case "Epic":
+        return { picks: Math.ceil(con / 2), maxAdverse: Math.ceil(con / 2), adverseBuysPicks: true };
+      case "Superhuman":
+        return { picks: con, maxAdverse: Math.ceil(con / 2), adverseBuysPicks: true };
+      default:
+        return { picks: 2, maxAdverse: 2, adverseBuysPicks: false };
+    }
+  }
 
   // js/engine/powersEngine.js
   function choosePowerSetOption(campaignPowerLevel, rng = Math.random) {
     const options = powerSetOptionsFor(campaignPowerLevel);
     return options[Math.floor(rng() * options.length)];
   }
-  function assignPowerTypes(option, rng = Math.random, { allowDuplicates = false } = {}) {
-    const totalSlots = option.reduce((sum, o) => sum + o.count, 0);
-    const available = [...POWER_TYPES];
+  function canUsePowerType(typeId, characteristics) {
+    const type = findPowerType(typeId);
+    if (!type) return false;
+    return !type.minPOW || (characteristics?.POW ?? 0) >= type.minPOW;
+  }
+  function assignPowerTypes(option, rng = Math.random, { allowDuplicates = false, characteristics = null } = {}) {
+    const usable = characteristics ? POWER_TYPES.filter((t) => canUsePowerType(t.id, characteristics)) : POWER_TYPES;
+    const available = [...usable];
     const assignments = [];
     for (const { level, count } of option) {
       for (let i = 0; i < count; i++) {
-        let pool = available.length > 0 ? available : POWER_TYPES;
+        let pool = available.length > 0 ? available : usable;
         const idx = Math.floor(rng() * pool.length);
         const type = pool[idx];
         if (!allowDuplicates) {
           const realIdx = available.indexOf(type);
           if (realIdx >= 0) available.splice(realIdx, 1);
         }
-        assignments.push({ level, type: type.id, name: type.name, resistance: type.resistance, spells: [] });
+        assignments.push({ level, type: type.id, name: type.name, resistance: type.resistance });
       }
     }
     return assignments;
-  }
-  function buildPowersBlock(campaignPowerLevel, pow, rng = Math.random) {
-    const option = choosePowerSetOption(campaignPowerLevel, rng);
-    const sets = assignPowerTypes(option, rng);
-    return { powerPoints: pow, sets };
   }
   function flattenPowerSetOption(option) {
     const slots = [];
@@ -1403,13 +1851,303 @@
     }
     return slots;
   }
-  function buildPowersBlockManual(pow, assignments) {
-    const sets = assignments.map(({ level, typeId }) => {
-      const type = findPowerType(typeId);
-      if (!type) throw new Error(`Unknown power type: ${typeId}`);
-      return { level, type: type.id, name: type.name, resistance: type.resistance, spells: [] };
-    });
-    return { powerPoints: pow, sets };
+  function startingPowerRules(typeId, powerLevel, characteristics) {
+    const { INT = 0, POW = 0, CON = 0 } = characteristics;
+    switch (typeId) {
+      case "magic":
+        return { kind: "list", catalog: MAGIC_SPELLS, count: STARTING_MAGIC_SPELLS[powerLevel], skill: INT, skillLabel: "INT\xD71", extras: STARTING_MAGIC_EXTRAS[powerLevel] ?? [] };
+      case "psychic":
+        return { kind: "list", catalog: PSYCHIC_ABILITIES, count: STARTING_PSYCHIC_ABILITIES[powerLevel], skill: POW, skillLabel: "POW\xD71", extras: [] };
+      case "sorcery":
+        return { kind: "levels", catalog: SORCERY_SPELLS, budget: sorcerySpellLevelBudget(powerLevel, INT), extras: ["Grimoire"] };
+      case "mutation":
+        return { kind: "mutations", catalog: MUTATIONS, ...mutationPickRules(powerLevel, CON), extras: [] };
+      case "superpowers":
+        return { kind: "points", catalog: SUPERPOWERS, budget: superpowerPointBudget(powerLevel, characteristics), extras: [] };
+      default:
+        throw new Error(`Unknown power type: ${typeId}`);
+    }
+  }
+  function pickDistinct(list, count, rng) {
+    const pool = [...list];
+    const picks = [];
+    while (picks.length < count && pool.length > 0) picks.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+    return picks;
+  }
+  function setShell(powerLevel, typeId) {
+    const type = findPowerType(typeId);
+    if (!type) throw new Error(`Unknown power type: ${typeId}`);
+    return { level: powerLevel, type: type.id, name: type.name, resistance: type.resistance };
+  }
+  function mutationPicksUsed(mutations) {
+    return mutations.reduce((sum, m) => sum + (m.severity === "major" ? 2 : 1), 0);
+  }
+  function addMutationResult(mutations, def) {
+    const existing = mutations.find((m) => m.name === def.name);
+    if (!existing) {
+      mutations.push({ name: def.name, severity: "minor", adverse: !!def.adverse });
+      return true;
+    }
+    if (existing.severity === "major" || def.minorOnly) return false;
+    existing.severity = "major";
+    return true;
+  }
+  function generateMutations(powerLevel, characteristics, rng = Math.random) {
+    const rules = mutationPickRules(powerLevel, characteristics.CON ?? 0);
+    const mutations = [];
+    let guard = 0;
+    if (!rules.adverseBuysPicks) {
+      let rollsLeft = rules.picks;
+      while (rollsLeft > 0 && guard++ < 1e3) {
+        const def = mutationForRoll(roll1d100(rng));
+        if (!def || !addMutationResult(mutations, def)) continue;
+        rollsLeft--;
+        if (def.adverse && roll1d100(rng) <= (characteristics.POW ?? 0) * 5) rollsLeft++;
+      }
+      return mutations;
+    }
+    const beneficial = MUTATIONS.filter((m) => !m.adverse);
+    while (mutationPicksUsed(mutations) < rules.picks && guard++ < 1e3) {
+      const def = beneficial[Math.floor(rng() * beneficial.length)];
+      addMutationResult(mutations, def);
+    }
+    return mutations;
+  }
+  function validateMutationPicks(powerLevel, characteristics, picks) {
+    const rules = mutationPickRules(powerLevel, characteristics.CON ?? 0);
+    const names = /* @__PURE__ */ new Set();
+    let adverse = 0;
+    let beneficial = 0;
+    for (const { name, severity } of picks) {
+      const def = findMutation(name);
+      if (!def) throw new Error(`Unknown mutation: ${name}`);
+      if (names.has(name)) throw new Error(`${name} is picked more than once. Pick it as major instead.`);
+      names.add(name);
+      if (severity !== "minor" && severity !== "major") throw new Error(`Choose minor or major for ${name}.`);
+      if (severity === "major" && def.minorOnly) throw new Error(`${name} has only a minor version.`);
+      const cost = severity === "major" ? 2 : 1;
+      if (def.adverse) adverse += cost;
+      else beneficial += cost;
+    }
+    if (!rules.adverseBuysPicks) {
+      if (adverse + beneficial !== rules.picks) throw new Error(`Pick exactly ${rules.picks} mutation picks (a major mutation counts as 2).`);
+      return;
+    }
+    if (adverse > rules.maxAdverse) throw new Error(`You can take at most ${rules.maxAdverse} adverse mutation picks.`);
+    if (adverse + beneficial < rules.picks) throw new Error(`Use all ${rules.picks} mutation picks (a major mutation counts as 2).`);
+    if (beneficial > rules.picks + adverse) throw new Error(`You have ${rules.picks + adverse} beneficial picks (${rules.picks} plus 1 per adverse pick).`);
+  }
+  function generateSorcerySpells(powerLevel, characteristics, rng = Math.random) {
+    let remaining = sorcerySpellLevelBudget(powerLevel, characteristics.INT ?? 0);
+    const spells = [];
+    for (const spell of pickDistinct(SORCERY_SPELLS, SORCERY_SPELLS.length, rng)) {
+      const maxFit = Math.min(spell.max, remaining);
+      if (maxFit < spell.min) continue;
+      const level = spell.min + Math.floor(rng() * (maxFit - spell.min + 1));
+      spells.push({ name: spell.name, level });
+      remaining -= level;
+    }
+    return spells;
+  }
+  function validateSorceryPicks(powerLevel, characteristics, picks) {
+    const budget = sorcerySpellLevelBudget(powerLevel, characteristics.INT ?? 0);
+    const names = /* @__PURE__ */ new Set();
+    let total = 0;
+    for (const { name, level } of picks) {
+      const spell = findSorcerySpell(name);
+      if (!spell) throw new Error(`Unknown sorcery spell: ${name}`);
+      if (names.has(name)) throw new Error(`${name} is picked more than once.`);
+      names.add(name);
+      if (!Number.isInteger(level) || level < spell.min || level > spell.max) throw new Error(`${name} must be level ${spell.min === spell.max ? spell.min : `${spell.min}-${spell.max}`}.`);
+      total += level;
+    }
+    if (total > budget) throw new Error(`Sorcery spells total ${total} levels, but the limit is ${budget}.`);
+  }
+  function superpowerUnitCost(power, variantName, characteristics) {
+    let cost = power.cost;
+    if (power.variants) {
+      const variant = power.variants.find((v) => v.name === variantName);
+      if (!variant) return null;
+      cost = variant.cost;
+    }
+    return power.costPerSIZ ? cost * (characteristics.SIZ ?? 0) : cost;
+  }
+  function superpowerMaxLevel(power) {
+    if (power.maxLevel) return power.maxLevel;
+    if (power.specifyPerLevel) return power.specify.length;
+    return Infinity;
+  }
+  function superpowerSpecifyOptions(power) {
+    if (power.specify === "skill") return SKILLS.map((s) => s.name);
+    return power.specify ?? null;
+  }
+  function superpowerCost({ name, variant, level }, characteristics) {
+    const power = findSuperpower(name);
+    if (!power) throw new Error(`Unknown superpower: ${name}`);
+    const unit = superpowerUnitCost(power, variant, characteristics);
+    if (unit == null) throw new Error(`Choose a valid option for ${name}.`);
+    return unit * level;
+  }
+  function usableVariants(power, characteristics) {
+    return power.variants.filter((v) => power.name !== "Super Characteristic" || characteristics[v.name] != null);
+  }
+  function generateSuperpowers(powerLevel, characteristics, rng = Math.random, { maxPowers = 8 } = {}) {
+    let remaining = superpowerPointBudget(powerLevel, characteristics);
+    const bought = [];
+    const taken = /* @__PURE__ */ new Set();
+    while (bought.length < maxPowers) {
+      const candidates = [];
+      for (const power2 of SUPERPOWERS) {
+        if (taken.has(power2.name)) continue;
+        const variants = power2.variants ? usableVariants(power2, characteristics) : [null];
+        for (const v of variants) {
+          const unit2 = superpowerUnitCost(power2, v?.name, characteristics);
+          if (unit2 > 0 && unit2 <= remaining) candidates.push({ power: power2, variant: v?.name ?? null, unit: unit2 });
+        }
+      }
+      if (candidates.length === 0) break;
+      const { power, variant, unit } = candidates[Math.floor(rng() * candidates.length)];
+      const maxAffordable = Math.min(Math.floor(remaining / unit), superpowerMaxLevel(power));
+      const levelCap = Math.max(1, Math.ceil(maxAffordable / 2));
+      const level = 1 + Math.floor(rng() * levelCap);
+      const entry = { name: power.name, level, cost: unit * level };
+      if (variant) entry.variant = variant;
+      const options = superpowerSpecifyOptions(power);
+      if (options) entry.specifics = pickDistinct(options, power.specifyPerLevel ? level : 1, rng);
+      bought.push(entry);
+      taken.add(power.name);
+      remaining -= entry.cost;
+    }
+    return bought;
+  }
+  function validateSuperpowerPicks(powerLevel, characteristics, picks) {
+    const budget = superpowerPointBudget(powerLevel, characteristics);
+    let total = 0;
+    for (const pick2 of picks) {
+      const power = findSuperpower(pick2.name);
+      if (!power) throw new Error(`Unknown superpower: ${pick2.name}`);
+      if (!Number.isInteger(pick2.level) || pick2.level < 1) throw new Error(`${pick2.name} needs a level of 1 or more.`);
+      if (pick2.level > superpowerMaxLevel(power)) throw new Error(`${pick2.name} can be at most level ${superpowerMaxLevel(power)}.`);
+      const options = superpowerSpecifyOptions(power);
+      if (options) {
+        const specifics = pick2.specifics ?? [];
+        const needed = power.specifyPerLevel ? pick2.level : 1;
+        if (specifics.length !== needed || new Set(specifics).size !== needed || specifics.some((s) => !options.includes(s))) {
+          throw new Error(`${pick2.name} needs ${needed === 1 ? "one choice" : `${needed} different choices`} from its list.`);
+        }
+      }
+      total += superpowerCost(pick2, characteristics);
+    }
+    if (total > budget) throw new Error(`Superpowers cost ${total} character points, but the budget is ${budget}.`);
+  }
+  function spentFor(typeId, powers) {
+    if (typeId === "sorcery") return powers.reduce((sum, p) => sum + p.level, 0);
+    if (typeId === "superpowers") return powers.reduce((sum, p) => sum + p.cost, 0);
+    return void 0;
+  }
+  function finishSet(powerLevel, typeId, characteristics, powers) {
+    const rules = startingPowerRules(typeId, powerLevel, characteristics);
+    const set = { ...setShell(powerLevel, typeId), powers, extras: [...rules.extras] };
+    if (rules.budget != null) {
+      set.budget = rules.budget;
+      set.spent = spentFor(typeId, powers);
+    }
+    return set;
+  }
+  function generatePowerSet(powerLevel, typeId, characteristics, rng = Math.random) {
+    const rules = startingPowerRules(typeId, powerLevel, characteristics);
+    let powers;
+    switch (typeId) {
+      case "magic":
+      case "psychic":
+        powers = pickDistinct(rules.catalog, rules.count, rng).map((p) => ({ name: p.name, skill: rules.skill }));
+        break;
+      case "sorcery":
+        powers = generateSorcerySpells(powerLevel, characteristics, rng);
+        break;
+      case "mutation":
+        powers = generateMutations(powerLevel, characteristics, rng);
+        break;
+      case "superpowers":
+        powers = generateSuperpowers(powerLevel, characteristics, rng);
+        break;
+    }
+    return finishSet(powerLevel, typeId, characteristics, powers);
+  }
+  function buildPowerSetManual(powerLevel, typeId, characteristics, picks = []) {
+    if (!canUsePowerType(typeId, characteristics)) throw new Error(`${findPowerType(typeId)?.name ?? typeId} needs POW ${findPowerType(typeId)?.minPOW}+.`);
+    const rules = startingPowerRules(typeId, powerLevel, characteristics);
+    let powers;
+    switch (typeId) {
+      case "magic":
+      case "psychic": {
+        const names = picks.map((p) => typeof p === "string" ? p : p.name);
+        const known = new Set(rules.catalog.map((c) => c.name));
+        const unknown = names.find((n) => !known.has(n));
+        if (unknown) throw new Error(`Unknown entry: ${unknown}`);
+        if (new Set(names).size !== names.length) throw new Error("Each entry can be picked only once.");
+        if (names.length !== rules.count) throw new Error(`Pick exactly ${rules.count} for this ${findPowerType(typeId).name} power set.`);
+        powers = names.map((name) => ({ name, skill: rules.skill }));
+        break;
+      }
+      case "sorcery":
+        validateSorceryPicks(powerLevel, characteristics, picks);
+        powers = picks.map(({ name, level }) => ({ name, level }));
+        break;
+      case "mutation":
+        validateMutationPicks(powerLevel, characteristics, picks);
+        powers = picks.map(({ name, severity }) => ({ name, severity, adverse: !!findMutation(name).adverse }));
+        break;
+      case "superpowers":
+        validateSuperpowerPicks(powerLevel, characteristics, picks);
+        powers = picks.map((p) => {
+          const entry = { name: p.name, level: p.level, cost: superpowerCost(p, characteristics) };
+          if (p.variant) entry.variant = p.variant;
+          if (p.specifics?.length) entry.specifics = [...p.specifics];
+          return entry;
+        });
+        break;
+    }
+    return finishSet(powerLevel, typeId, characteristics, powers);
+  }
+  function extraPowerPoints(sets) {
+    let extra = 0;
+    for (const set of sets) {
+      for (const p of set.powers ?? []) if (p.name === "Extra Energy" && set.type === "superpowers") extra += 10 * p.level;
+    }
+    return extra;
+  }
+  function buildPowersBlock(campaignPowerLevel, pow, characteristics, rng = Math.random) {
+    const option = choosePowerSetOption(campaignPowerLevel, rng);
+    const sets = assignPowerTypes(option, rng, { characteristics }).map((a) => generatePowerSet(a.level, a.type, characteristics, rng));
+    return { powerPoints: pow + extraPowerPoints(sets), sets };
+  }
+  function buildPowersBlockManual(pow, assignments, characteristics) {
+    const sets = assignments.map(({ level, typeId, picks }) => buildPowerSetManual(level, typeId, characteristics, picks));
+    return { powerPoints: pow + extraPowerPoints(sets), sets };
+  }
+  function describePower(typeId, entry) {
+    switch (typeId) {
+      case "magic":
+      case "psychic":
+        return `${entry.name} ${entry.skill}%`;
+      case "sorcery":
+        return `${entry.name} (level ${entry.level})`;
+      case "mutation":
+        return `${entry.name} (${entry.severity}${entry.adverse ? ", adverse" : ""})`;
+      case "superpowers": {
+        const qualifiers = [entry.variant, ...entry.specifics ?? []].filter(Boolean);
+        const name = qualifiers.length ? `${entry.name} (${qualifiers.join(", ")})` : entry.name;
+        return `${name} ${entry.level} -- ${entry.cost} pts`;
+      }
+      default:
+        return entry.name;
+    }
+  }
+  function describePowerSet(set) {
+    let label = `${set.name} (${set.level})`;
+    if (set.budget != null) label += ` -- ${set.spent}/${set.budget} ${set.type === "sorcery" ? "spell levels" : "character points"}`;
+    return label;
   }
 
   // js/engine/wealth.js
@@ -1456,6 +2194,150 @@
     };
   }
 
+  // js/data/names.js
+  var GIVEN_NAMES = {
+    female: [
+      "Ada",
+      "Amara",
+      "Beatrix",
+      "Carmen",
+      "Clara",
+      "Daria",
+      "Edith",
+      "Elena",
+      "Freya",
+      "Greta",
+      "Hana",
+      "Ines",
+      "Iris",
+      "Jun",
+      "Kira",
+      "Lena",
+      "Lucia",
+      "Mabel",
+      "Maya",
+      "Nadia",
+      "Nora",
+      "Olga",
+      "Priya",
+      "Rosa",
+      "Sana",
+      "Tess",
+      "Una",
+      "Vera",
+      "Yara",
+      "Zofia"
+    ],
+    male: [
+      "Aaron",
+      "Arjun",
+      "Bram",
+      "Caleb",
+      "Dante",
+      "Elias",
+      "Emil",
+      "Felix",
+      "Gideon",
+      "Hugo",
+      "Ivan",
+      "Jonas",
+      "Kenji",
+      "Leo",
+      "Luca",
+      "Marcus",
+      "Milo",
+      "Nico",
+      "Omar",
+      "Pavel",
+      "Quentin",
+      "Rafael",
+      "Silas",
+      "Tobias",
+      "Viktor",
+      "Walter",
+      "Xavier",
+      "Yusuf",
+      "Zane",
+      "Theo"
+    ],
+    neutral: [
+      "Alex",
+      "Ash",
+      "Avery",
+      "Blake",
+      "Casey",
+      "Charlie",
+      "Dana",
+      "Eden",
+      "Ellis",
+      "Finley",
+      "Jamie",
+      "Jordan",
+      "Kai",
+      "Morgan",
+      "Noel",
+      "Quinn",
+      "Reese",
+      "Robin",
+      "Rowan",
+      "Sam"
+    ]
+  };
+  var SURNAMES = [
+    "Abbott",
+    "Alvarez",
+    "Bauer",
+    "Blackwood",
+    "Castillo",
+    "Chen",
+    "Costa",
+    "Dalton",
+    "Dubois",
+    "Eriksen",
+    "Falk",
+    "Fischer",
+    "Garcia",
+    "Grant",
+    "Haas",
+    "Hayes",
+    "Ivanova",
+    "Jensen",
+    "Kaur",
+    "Kowalski",
+    "Lindqvist",
+    "Marsh",
+    "Moreau",
+    "Nakamura",
+    "Novak",
+    "Okafor",
+    "Petrov",
+    "Quint",
+    "Reyes",
+    "Rossi",
+    "Sato",
+    "Silva",
+    "Stone",
+    "Thorne",
+    "Underwood",
+    "Vance",
+    "Varga",
+    "Weber",
+    "Whitlock",
+    "Young"
+  ];
+
+  // js/engine/names.js
+  var pick = (list, rng) => list[Math.floor(rng() * list.length)];
+  function givenNamePool(gender = "") {
+    const g = gender.trim().toLowerCase();
+    if (/^(f|female|woman|girl)$/.test(g)) return GIVEN_NAMES.female;
+    if (/^(m|male|man|boy)$/.test(g)) return GIVEN_NAMES.male;
+    return [...GIVEN_NAMES.female, ...GIVEN_NAMES.male, ...GIVEN_NAMES.neutral];
+  }
+  function randomName(gender = "", rng = Math.random) {
+    return `${pick(givenNamePool(gender), rng)} ${pick(SURNAMES, rng)}`;
+  }
+
   // js/engine/characterFactory.js
   function defaultOptions() {
     return {
@@ -1473,14 +2355,15 @@
       useIncreasedPersonalPoints: false,
       useAgeModifiers: true,
       usePowers: false,
+      setting: "any",
       profession: null,
       age: null,
       name: "",
       gender: ""
     };
   }
-  function extraPersonalSkillSlots(rng, exclude) {
-    const pool = SKILLS.filter((s) => !exclude.has(s.name));
+  function extraPersonalSkillSlots(rng, exclude, era2 = null) {
+    const pool = SKILLS.filter((s) => !exclude.has(s.name) && skillFits(s.name, era2));
     const count = 5 + Math.floor(rng() * 6);
     const names = [];
     const working = [...pool];
@@ -1488,7 +2371,7 @@
       const idx = Math.floor(rng() * working.length);
       const skillDef = working.splice(idx, 1)[0];
       const ref = skillDef.specialty ? `${skillDef.name} (any)` : skillDef.name;
-      const display = resolveSkillDisplayName(ref, rng);
+      const display = resolveSkillDisplayName(ref, rng, era2);
       if (display) names.push(display);
     }
     return names;
@@ -1498,6 +2381,7 @@
     const level = options.campaignPowerLevel;
     let chars = generateCharacteristics(options.characteristicMethod, rng, level);
     if (options.useEDU) chars.EDU = roll2d6plus6(rng);
+    const baseChars = { ...chars };
     let age = options.age ?? rollStartingAge(rng);
     if (options.useEDU && age < chars.EDU + 5) age = chars.EDU + 5;
     let skillPointModifier = 0;
@@ -1521,18 +2405,20 @@
       sanityOption: options.useSanity,
       hitLocationOption: options.useHitLocation
     });
-    const powers = options.usePowers ? buildPowersBlock(level, derived.powerPoints, rng) : null;
-    const professionName = options.profession ?? PROFESSIONS[Math.floor(rng() * PROFESSIONS.length)].name;
+    const powers = options.usePowers ? buildPowersBlock(level, derived.powerPoints, baseChars, rng) : null;
+    const era2 = settingEra(options.setting);
+    const allowed = professionsForSetting(options.setting);
+    const professionName = options.profession ?? allowed[Math.floor(rng() * allowed.length)].name;
     const profession = findProfession(professionName);
     if (!profession) throw new Error(`Unknown profession: ${professionName}`);
-    const professionSkillNames = resolveProfessionSkills(profession, rng);
-    const skillOptions = { useCategoryBonus: options.useCategoryBonus, categoryBonusMethod: options.categoryBonusMethod, usePowers: options.usePowers };
+    const professionSkillNames = resolveProfessionSkills(profession, rng, era2);
+    const skillOptions = { useCategoryBonus: options.useCategoryBonus, categoryBonusMethod: options.categoryBonusMethod, usePowers: options.usePowers, era: era2 };
     const entries = baselineSkillEntries(chars, skillOptions);
     for (const name of professionSkillNames) ensureSkillEntry(entries, name, chars, skillOptions);
     let personality = null;
     if (options.usePersonality) {
       const type = rollPersonalityType(rng);
-      const personalitySkillNames = resolvePersonalitySkills(type, rng);
+      const personalitySkillNames = resolvePersonalitySkills(type, rng, era2);
       for (const name of personalitySkillNames) {
         const entry = ensureSkillEntry(entries, name, chars, skillOptions);
         entry.personalityBonus += PERSONALITY_BONUS;
@@ -1550,7 +2436,7 @@
     const personalPool = personalSkillPointPool(chars.INT, level, { increasedOption: options.useIncreasedPersonalPoints });
     const personalCap = personalSkillCap(level);
     const alreadyNamed = new Set(Object.keys(entries));
-    const extraNames = extraPersonalSkillSlots(rng, alreadyNamed);
+    const extraNames = extraPersonalSkillSlots(rng, alreadyNamed, era2);
     for (const name of extraNames) ensureSkillEntry(entries, name, chars, skillOptions);
     const personalCandidateKeys = [.../* @__PURE__ */ new Set([...professionSkillNames, ...personality?.skills ?? [], ...extraNames])];
     const personalSlots = personalCandidateKeys.map((name) => ({
@@ -1562,7 +2448,7 @@
     const distinctiveFeatures = options.useDistinctiveFeatures ? generateDistinctiveFeatures(chars.CHA, rng) : [];
     const wealth = pickWealthLevel(profession.wealth, rng);
     return assembleCharacter({
-      name: options.name,
+      name: options.name || randomName(options.gender, rng),
       gender: options.gender,
       age,
       professionName: profession.name,
@@ -1648,6 +2534,8 @@
       ["Gender", character.gender || "-"]
     ];
     if (character.personality) rows.push(["Personality", character.personality.name]);
+    const setting = findSetting(character.options?.setting);
+    if (setting.era != null) rows.push(["Setting", setting.name]);
     const card = el("div", { class: "card" }, [
       el("h3", { text: "Summary" }),
       el(
@@ -1678,20 +2566,19 @@
   }
   function powersCard(character) {
     if (!character.powers) return null;
-    const list = el(
-      "ul",
-      { class: "powers-list" },
-      character.powers.sets.map(
-        (s) => el("li", { text: `${s.name} (${s.level} power level, resists via ${s.resistance})` })
-      )
-    );
+    const sets = character.powers.sets.map((s) => {
+      const items = [
+        ...(s.powers ?? []).map((p) => el("li", { text: describePower(s.type, p) })),
+        ...(s.extras ?? []).map((extra) => el("li", { text: extra }))
+      ];
+      return el("div", { class: "power-set" }, [
+        el("h4", { text: `${describePowerSet(s)}, resists via ${s.resistance}` }),
+        el("ul", { class: "powers-list" }, items)
+      ]);
+    });
     return el("div", { class: "card" }, [
       el("h3", { text: `Powers -- ${character.powers.powerPoints} Power Points` }),
-      list,
-      el("p", {
-        text: "Groundwork only: specific spells/mutations/talents are not generated and can be filled in during play.",
-        style: "color:var(--text-dim); font-size:0.8rem; margin-top:6px;"
-      })
+      ...sets
     ]);
   }
   function backgroundCard(character) {
@@ -1835,61 +2722,162 @@
   function sortedSkillEntries(character) {
     return Object.values(character.skills).map((e) => ({ ...e, total: skillTotal(e) })).sort((a, b) => a.name.localeCompare(b.name));
   }
+  var COMPENDIUM_POWER_NAMES = {
+    magic: { "Conjure Elemental": "Conjure (type) Elemental" },
+    psychic: { Sensitivity: "Sensitivity (Psychic Ability)" },
+    sorcery: { Heal: "Heal (Sorcery)", Leap: "Leap (Sorcery)", Ward: "Ward (Sorcery)" },
+    superpowers: Object.fromEntries(
+      ["Armor", "Invisibility", "Protection", "Regeneration", "Resistance", "Teleport"].map((n) => [n, `${n} (Superpower)`])
+    ),
+    mutation: { Coloration: "Coloration (Minor)" }
+  };
+  function compendiumPowerRef(typeId, entry) {
+    let name = COMPENDIUM_POWER_NAMES[typeId]?.[entry.name] ?? entry.name;
+    if (typeId === "mutation" && entry.adverse) name += " (Adverse)";
+    if (typeId === "sorcery") name = name.replace(/'/g, "\u2019");
+    return `[${name}]`;
+  }
+  function powerLine(typeId, entry) {
+    const ref = compendiumPowerRef(typeId, entry);
+    switch (typeId) {
+      case "magic":
+      case "psychic":
+        return `${ref} ${entry.skill}%`;
+      case "sorcery":
+        return `${ref} level ${entry.level}`;
+      case "mutation":
+        return `${ref} (${entry.severity})`;
+      case "superpowers": {
+        const qualifiers = [entry.variant, ...entry.specifics ?? []].filter(Boolean);
+        const name = qualifiers.length ? `${ref} (${qualifiers.join(", ")})` : ref;
+        return `${name} level ${entry.level}, ${entry.cost} pts`;
+      }
+      default:
+        return ref;
+    }
+  }
+  var ROLL_NAMES = { STR: "Effort", CON: "Stamina", INT: "Idea", POW: "Luck", DEX: "Agility", CHA: "Charm", EDU: "Knowledge" };
+  var CHARACTERISTIC_ORDER = ["STR", "CON", "SIZ", "INT", "POW", "DEX", "CHA", "EDU"];
+  var LOCATION_LABELS = {
+    head: "Head",
+    chest: "Chest",
+    abdomen: "Abdomen",
+    leftArm: "L. Arm",
+    rightArm: "R. Arm",
+    leftLeg: "L. Leg",
+    rightLeg: "R. Leg"
+  };
+  var pct = (n) => `${Math.max(0, n)}%`;
   function characterToMarkdown(character) {
+    const d = character.derived;
     const lines = [];
-    lines.push(`# ${character.name || "Unnamed Character"}`);
+    lines.push(`# ${character.name || "Unnamed Character"} [BRP]`);
     lines.push("");
-    lines.push(`**Profession:** ${character.profession}  `);
-    lines.push(`**Gender:** ${character.gender || "-"}  `);
-    lines.push(`**Age:** ${character.age}  `);
-    lines.push(`**Wealth:** ${character.wealth}  `);
-    if (character.personality) lines.push(`**Personality:** ${character.personality.name} -- ${character.personality.description}  `);
+    const setting = findSetting(character.options?.setting);
+    const tagline = [
+      character.profession,
+      character.gender,
+      character.age != null ? `Age ${character.age}` : null,
+      character.wealth,
+      setting.era != null ? setting.name : null
+    ].filter(Boolean).join(" \xB7 ");
+    lines.push(`*${tagline}*`);
     lines.push("");
-    lines.push("## Characteristics");
-    lines.push("");
-    lines.push("| Characteristic | Value | Roll |");
-    lines.push("|---|---|---|");
-    const rollNames = { STR: "Effort", CON: "Stamina", INT: "Idea", POW: "Luck", DEX: "Agility", CHA: "Charm", EDU: "Knowledge" };
-    for (const [key, value] of Object.entries(character.characteristics)) {
-      const rollName = rollNames[key];
-      const roll = rollName ? character.characteristicRolls[rollName] : "";
-      lines.push(`| ${key} | ${value} | ${roll ?? ""} |`);
-    }
-    lines.push("");
-    lines.push("## Derived Characteristics");
-    lines.push("");
-    lines.push(`- Damage Modifier: ${character.derived.damageModifier}`);
-    lines.push(`- Hit Points: ${character.derived.hitPoints}`);
-    lines.push(`- Major Wound Level: ${character.derived.majorWoundLevel}`);
-    lines.push(`- Power Points: ${character.derived.powerPoints}`);
-    lines.push(`- Experience Bonus: ${character.derived.experienceBonus}`);
-    lines.push(`- Move: ${character.derived.move}`);
-    if (character.derived.fatiguePoints != null) lines.push(`- Fatigue Points: ${character.derived.fatiguePoints}`);
-    if (character.derived.sanityPoints != null) lines.push(`- Sanity Points: ${character.derived.sanityPoints}`);
-    lines.push("");
-    if (character.distinctiveFeatures?.length) {
-      lines.push("## Distinctive Features");
-      lines.push("");
-      for (const f of character.distinctiveFeatures) lines.push(`- ${f.category}: ${f.description}`);
+    if (character.personality) {
+      lines.push(`**Personality:** ${character.personality.name}. ${character.personality.description}`);
       lines.push("");
     }
+    const keys = [
+      ...CHARACTERISTIC_ORDER.filter((k) => k in character.characteristics),
+      ...Object.keys(character.characteristics).filter((k) => !CHARACTERISTIC_ORDER.includes(k))
+    ];
+    lines.push(keys.map((k) => `${k}: ${character.characteristics[k]}`).join("; "));
+    lines.push("");
+    const powerPoints2 = character.powers?.powerPoints ?? d.powerPoints;
+    const resources = [`HP: ${d.hitPoints}/${d.hitPoints}`, `PP: ${powerPoints2}/${powerPoints2}`];
+    if (d.fatiguePoints != null) resources.push(`FP: ${d.fatiguePoints}/${d.fatiguePoints}`);
+    if (d.sanityPoints != null) resources.push(`SAN: ${d.sanityPoints}/${d.sanityPoints}`);
+    lines.push(resources.join("; "));
+    lines.push("");
+    lines.push([`Major Wound: ${d.majorWoundLevel}`, `Move: ${d.move}`, `Damage Modifier: ${d.damageModifier}`, `Experience Bonus: ${d.experienceBonus}`].join("; "));
+    lines.push("");
+    if (d.hitPointsByLocation) {
+      const locs = Object.entries(d.hitPointsByLocation).map(([loc, hp]) => `${LOCATION_LABELS[loc] ?? loc} ${hp}`);
+      lines.push(`**Hit locations:** ${locs.join(" \xB7 ")}`);
+      lines.push("");
+    }
+    lines.push("## Rolls");
+    lines.push("");
+    const rolls = Object.entries(ROLL_NAMES).filter(([key, rollName]) => key in character.characteristics && character.characteristicRolls[rollName] != null).map(([, rollName]) => `${rollName} ${pct(character.characteristicRolls[rollName])}`);
+    if (d.sanityPoints != null) rolls.push(`Sanity ${pct(d.sanityPoints)}`);
+    lines.push(rolls.join(", "));
+    lines.push("");
+    lines.push("## Skills");
+    lines.push("");
+    const byCategory = /* @__PURE__ */ new Map();
+    for (const entry of sortedSkillEntries(character)) {
+      if (!byCategory.has(entry.category)) byCategory.set(entry.category, []);
+      byCategory.get(entry.category).push(`${entry.name} ${pct(entry.total)}`);
+    }
+    for (const category of [...byCategory.keys()].sort()) {
+      lines.push(`- **${category}:** ${byCategory.get(category).join(", ")}`);
+    }
+    lines.push("");
     if (character.powers) {
       lines.push("## Powers");
       lines.push("");
-      lines.push(`Power Points: ${character.powers.powerPoints}`);
+      for (const set of character.powers.sets) {
+        lines.push(`### ${describePowerSet(set).replace(" -- ", ", ")}`);
+        lines.push("");
+        for (const p of set.powers ?? []) lines.push(`- ${powerLine(set.type, p)}`);
+        for (const extra of set.extras ?? []) lines.push(`- ${extra}`);
+        lines.push("");
+      }
+    }
+    if (character.distinctiveFeatures?.length) {
+      lines.push("## Distinctive features");
       lines.push("");
-      for (const set of character.powers.sets) lines.push(`- ${set.name} (${set.level})`);
+      for (const f of character.distinctiveFeatures) lines.push(`- **${f.category}:** ${f.description}`);
       lines.push("");
     }
-    lines.push("## Skills");
-    lines.push("");
-    lines.push("| Skill | Category | Total % |");
-    lines.push("|---|---|---|");
-    for (const entry of sortedSkillEntries(character)) {
-      lines.push(`| ${entry.name} | ${entry.category} | ${entry.total} |`);
+    const notes = [character.description, character.background].filter(Boolean);
+    if (notes.length || character.possessionsNotes) {
+      lines.push("## Notes");
+      lines.push("");
+      for (const n of notes) {
+        lines.push(n);
+        lines.push("");
+      }
+      if (character.possessionsNotes) {
+        lines.push(`**Possessions:** ${character.possessionsNotes}`);
+        lines.push("");
+      }
     }
-    lines.push("");
     return lines.join("\n");
+  }
+  async function copyMarkdownToClipboard(character) {
+    const md = characterToMarkdown(character);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(md);
+        return true;
+      }
+    } catch {
+    }
+    const area = document.createElement("textarea");
+    area.value = md;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      return typeof document.execCommand === "function" && document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+    }
   }
   function exportToMarkdown(character) {
     const md = characterToMarkdown(character);
@@ -1937,6 +2925,15 @@
     for (const entry of sortedSkillEntries(character)) {
       addLine(`${entry.name}  ${entry.total}%`, { size: 9, gap: 12 });
     }
+    if (character.powers) {
+      y += 6;
+      addLine(`Powers (${character.powers.powerPoints} Power Points)`, { size: 13, bold: true, gap: 18 });
+      for (const set of character.powers.sets) {
+        addLine(describePowerSet(set), { size: 10, bold: true, gap: 14 });
+        for (const p of set.powers ?? []) addLine(describePower(set.type, p), { size: 9, gap: 12 });
+        for (const extra of set.extras ?? []) addLine(extra, { size: 9, gap: 12 });
+      }
+    }
     if (character.distinctiveFeatures?.length) {
       y += 6;
       addLine("Distinctive Features", { size: 13, bold: true, gap: 18 });
@@ -1981,11 +2978,13 @@
       ageSkillPointModifier: 0,
       powerOptionIndex: null,
       powerSlotChoices: [],
-      // [{level, typeId}]
+      // [{level, typeId, picks}], picks shaped like a power set's `powers`
+      superpowerDrafts: {},
+      // slot index -> {name, variant, specific, specifics, level} for the "add superpower" form
       personalityMode: null,
       // 'type' | 'custom'
       personalityTypeId: null,
-      personalityPicks: { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [] },
+      personalityPicks: { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [], fixedSpecialties: {} },
       personalityCustomSkills: [],
       personality: null,
       // resolved {name, description, skills}
@@ -1994,6 +2993,8 @@
       // parallel to profession.choices
       professionSpecialtyChoices: {},
       // ref -> specialty
+      professionSubstitutions: {},
+      // ref -> substitute skill, for a skill that does not fit the setting
       skillEntries: null,
       professionalAllocations: {},
       personalAllocations: {},
@@ -2045,10 +3046,19 @@
     return Number.isFinite(n) ? n : fallback;
   }
   function skillOptionsForState() {
-    return { useCategoryBonus: state.options.useCategoryBonus, categoryBonusMethod: state.options.categoryBonusMethod, usePowers: state.options.usePowers };
+    return { useCategoryBonus: state.options.useCategoryBonus, categoryBonusMethod: state.options.categoryBonusMethod, usePowers: state.options.usePowers, era: era() };
+  }
+  function era() {
+    return settingEra(state.options.setting);
+  }
+  function specOptions(base) {
+    return specialtyOptionsFor(base, era());
+  }
+  function allowedProfessions() {
+    return professionsForSetting(state.options.setting);
   }
   function specialtySelect(base, currentValue, onChange) {
-    const options = specialtyOptionsFor(base) ?? [];
+    const options = specOptions(base) ?? [];
     const select = el("select", {
       onchange: (e) => onChange(e.target.value)
     });
@@ -2100,7 +3110,7 @@
     if (!state.rolledCharacteristics && !state.rollPool) rerollCharacteristics();
     container.appendChild(
       el("div", { class: "field-row" }, [
-        el("div", { class: "field" }, [el("label", { text: "Name" }), el("input", { type: "text", value: state.name, oninput: (e) => state.name = e.target.value })]),
+        el("div", { class: "field" }, [el("label", { text: "Name" }), el("input", { type: "text", value: state.name, placeholder: "(random if blank)", oninput: (e) => state.name = e.target.value })]),
         el("div", { class: "field" }, [el("label", { text: "Gender" }), el("input", { type: "text", value: state.gender, oninput: (e) => state.gender = e.target.value })])
       ])
     );
@@ -2290,15 +3300,22 @@
   function powerOptionLabel(option) {
     return option.map((o) => `${o.count} at ${o.level}`).join(" + ");
   }
+  function newPowerSlot(level, typeId) {
+    const chars = state.baseCharacteristics;
+    return { level, typeId, picks: generatePowerSet(level, typeId, chars).powers };
+  }
+  function firstUsablePowerType() {
+    return POWER_TYPES.find((t) => canUsePowerType(t.id, state.baseCharacteristics)).id;
+  }
   function renderPowersStep(container) {
     const level = state.options.campaignPowerLevel;
     const powerOptions = powerSetOptionsFor(level);
     if (state.powerOptionIndex == null) state.powerOptionIndex = 0;
     if (state.powerSlotChoices.length === 0) {
       const slots = flattenPowerSetOption(powerOptions[state.powerOptionIndex]);
-      state.powerSlotChoices = slots.map((s) => ({ level: s.level, typeId: POWER_TYPES[0].id }));
+      state.powerSlotChoices = slots.map((s) => newPowerSlot(s.level, firstUsablePowerType()));
     }
-    container.appendChild(el("p", { class: "readonly-note", text: "Choose how many power sets your character begins with, and what type each one is." }));
+    container.appendChild(el("p", { class: "readonly-note", text: "Choose how many power sets your character begins with, what type each one is, and its starting powers." }));
     const radios = powerOptions.map(
       (option, i) => el("label", { class: "toggle", style: "display:block; margin-bottom:6px;" }, [
         el("input", {
@@ -2307,7 +3324,8 @@
           ...i === state.powerOptionIndex ? { checked: "checked" } : {},
           onchange: () => {
             state.powerOptionIndex = i;
-            state.powerSlotChoices = flattenPowerSetOption(powerOptions[i]).map((s) => ({ level: s.level, typeId: POWER_TYPES[0].id }));
+            state.powerSlotChoices = flattenPowerSetOption(powerOptions[i]).map((s) => newPowerSlot(s.level, firstUsablePowerType()));
+            state.superpowerDrafts = {};
             rerenderStep();
           }
         }),
@@ -2315,30 +3333,295 @@
       ])
     );
     container.appendChild(el("div", {}, radios));
-    const slotRows = state.powerSlotChoices.map(
-      (slot, i) => el("div", { class: "field-row" }, [
+    state.powerSlotChoices.forEach((slot, i) => container.appendChild(renderPowerSlot(slot, i)));
+  }
+  function renderPowerSlot(slot, i) {
+    const chars = state.baseCharacteristics;
+    const typeSelect = el(
+      "select",
+      {
+        onchange: (e) => {
+          state.powerSlotChoices[i] = newPowerSlot(slot.level, e.target.value);
+          delete state.superpowerDrafts[i];
+          rerenderStep();
+        }
+      },
+      POWER_TYPES.map((t) => {
+        const usable = canUsePowerType(t.id, chars);
+        const opt = el("option", { value: t.id, text: `${t.name} (resists via ${t.resistance})${usable ? "" : ` -- needs POW ${t.minPOW}+`}` });
+        if (!usable) opt.setAttribute("disabled", "disabled");
+        if (t.id === slot.typeId) opt.setAttribute("selected", "selected");
+        return opt;
+      })
+    );
+    const rollBtn = el("button", {
+      class: "btn btn-small",
+      text: "\u{1F3B2} Roll this set",
+      onclick: () => {
+        state.powerSlotChoices[i] = newPowerSlot(slot.level, slot.typeId);
+        rerenderStep();
+      }
+    });
+    const wrap = el("div", { class: "card power-slot" }, [
+      el("div", { class: "field-row" }, [el("div", { class: "field" }, [el("label", { text: `Power set ${i + 1} (${slot.level})` }), typeSelect]), rollBtn])
+    ]);
+    const rules = startingPowerRules(slot.typeId, slot.level, chars);
+    const pickers = { list: renderListPicker, levels: renderSorceryPicker, mutations: renderMutationPicker, points: renderSuperpowerPicker };
+    wrap.appendChild(pickers[rules.kind](slot, i, rules));
+    if (rules.extras.length) wrap.appendChild(el("p", { class: "readonly-note", text: `Also begins with: ${rules.extras.join(", ")}.` }));
+    return wrap;
+  }
+  function renderListPicker(slot, i, rules) {
+    const wrap = el("div", {});
+    const selected = slot.picks.map((p) => p.name);
+    wrap.appendChild(el("p", { class: "budget-line", text: `Selected: ${selected.length} / ${rules.count}, each at ${rules.skillLabel} (${rules.skill}%)` }));
+    const grid = el("div", { class: "power-picker-grid" });
+    for (const entry of rules.catalog) {
+      const checked = selected.includes(entry.name);
+      grid.appendChild(
+        el("label", { class: "toggle", title: entry.summary }, [
+          el("input", {
+            type: "checkbox",
+            ...checked ? { checked: "checked" } : {},
+            onchange: (e) => {
+              if (e.target.checked) {
+                if (slot.picks.length >= rules.count) {
+                  e.target.checked = false;
+                  return showError(`You can only pick ${rules.count}.`);
+                }
+                slot.picks.push({ name: entry.name, skill: rules.skill });
+              } else {
+                slot.picks = slot.picks.filter((p) => p.name !== entry.name);
+              }
+              showError(null);
+              rerenderStep();
+            }
+          }),
+          ` ${entry.name}`
+        ])
+      );
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+  function renderSorceryPicker(slot, i, rules) {
+    const wrap = el("div", {});
+    const used = slot.picks.reduce((sum, p) => sum + p.level, 0);
+    wrap.appendChild(el("p", { class: "budget-line", text: `Spell levels used: ${used} / ${rules.budget}` }));
+    const grid = el("div", { class: "power-picker-grid" });
+    for (const spell of rules.catalog) {
+      const current = slot.picks.find((p) => p.name === spell.name)?.level ?? 0;
+      const levels = [0];
+      for (let l = spell.min; l <= spell.max; l++) levels.push(l);
+      const select = el(
+        "select",
+        {
+          onchange: (e) => {
+            const level = Number(e.target.value);
+            slot.picks = slot.picks.filter((p) => p.name !== spell.name);
+            if (level > 0) slot.picks.push({ name: spell.name, level });
+            rerenderStep();
+          }
+        },
+        levels.map((l) => {
+          const opt = el("option", { value: String(l), text: l === 0 ? "--" : `level ${l}` });
+          if (l === current) opt.setAttribute("selected", "selected");
+          return opt;
+        })
+      );
+      grid.appendChild(el("label", { class: "toggle", title: spell.summary }, [select, ` ${spell.name}`]));
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+  function renderMutationPicker(slot, i, rules) {
+    const wrap = el("div", {});
+    const used = mutationPicksUsed(slot.picks);
+    const note = rules.adverseBuysPicks ? `Picks used: ${used} (allowance ${rules.picks}; each adverse pick buys 1 more beneficial pick, at most ${rules.maxAdverse} adverse). A major mutation counts as 2.` : `Picks used: ${used} / ${rules.picks}. A major mutation counts as 2. Roll this set to use the D100 table with the Luck roll for adverse results.`;
+    wrap.appendChild(el("p", { class: "budget-line", text: note }));
+    const grid = el("div", { class: "power-picker-grid" });
+    for (const m of rules.catalog) {
+      const current = slot.picks.find((p) => p.name === m.name)?.severity ?? "";
+      const choices = ["", "minor", ...m.minorOnly ? [] : ["major"]];
+      const select = el(
+        "select",
+        {
+          onchange: (e) => {
+            slot.picks = slot.picks.filter((p) => p.name !== m.name);
+            if (e.target.value) slot.picks.push({ name: m.name, severity: e.target.value, adverse: !!m.adverse });
+            rerenderStep();
+          }
+        },
+        choices.map((c) => {
+          const opt = el("option", { value: c, text: c || "--" });
+          if (c === current) opt.setAttribute("selected", "selected");
+          return opt;
+        })
+      );
+      grid.appendChild(el("label", { class: "toggle", title: m.summary }, [select, ` ${m.name}${m.adverse ? " (adverse)" : ""}`]));
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+  function renderSuperpowerPicker(slot, i, rules) {
+    const chars = state.baseCharacteristics;
+    const wrap = el("div", {});
+    const used = slot.picks.reduce((sum, p) => sum + p.cost, 0);
+    wrap.appendChild(el("p", { class: "budget-line", text: `Character points used: ${used} / ${rules.budget}` }));
+    wrap.appendChild(
+      el(
+        "ul",
+        { class: "powers-list" },
+        slot.picks.map(
+          (p, idx) => el("li", {}, [
+            `${describePower("superpowers", p)} `,
+            el("button", {
+              class: "btn btn-small",
+              text: "Remove",
+              onclick: () => {
+                slot.picks.splice(idx, 1);
+                rerenderStep();
+              }
+            })
+          ])
+        )
+      )
+    );
+    const draft = state.superpowerDrafts[i] ??= { name: rules.catalog[0].name, variant: null, specific: null, specifics: [], level: 1 };
+    const power = findSuperpower(draft.name);
+    if (power.variants && !power.variants.some((v) => v.name === draft.variant)) draft.variant = power.variants[0].name;
+    const specifyOptions = superpowerSpecifyOptions(power);
+    if (specifyOptions && !power.specifyPerLevel && !specifyOptions.includes(draft.specific)) draft.specific = specifyOptions[0];
+    const fields = [];
+    fields.push(
+      el("div", { class: "field" }, [
+        el("label", { text: "Superpower" }),
+        el(
+          "select",
+          {
+            onchange: (e) => {
+              state.superpowerDrafts[i] = { name: e.target.value, variant: null, specific: null, specifics: [], level: 1 };
+              rerenderStep();
+            }
+          },
+          rules.catalog.map((p) => {
+            const opt = el("option", { value: p.name, text: p.name, title: p.summary });
+            if (p.name === draft.name) opt.setAttribute("selected", "selected");
+            return opt;
+          })
+        )
+      ])
+    );
+    if (power.variants) {
+      fields.push(
         el("div", { class: "field" }, [
-          el("label", { text: `Power set ${i + 1} (${slot.level})` }),
+          el("label", { text: "Option" }),
           el(
             "select",
-            {
-              onchange: (e) => {
-                state.powerSlotChoices[i].typeId = e.target.value;
-              }
-            },
-            POWER_TYPES.map((t) => {
-              const opt = el("option", { value: t.id, text: `${t.name} (resists via ${t.resistance})` });
-              if (t.id === slot.typeId) opt.setAttribute("selected", "selected");
+            { onchange: (e) => {
+              draft.variant = e.target.value;
+              rerenderStep();
+            } },
+            power.variants.map((v) => {
+              const opt = el("option", { value: v.name, text: `${v.name} (${power.costPerSIZ ? v.cost * chars.SIZ : v.cost}/level)` });
+              if (v.name === draft.variant) opt.setAttribute("selected", "selected");
               return opt;
             })
           )
         ])
-      ])
+      );
+    }
+    if (specifyOptions && !power.specifyPerLevel) {
+      fields.push(
+        el("div", { class: "field" }, [
+          el("label", { text: "Type" }),
+          el(
+            "select",
+            { onchange: (e) => {
+              draft.specific = e.target.value;
+            } },
+            specifyOptions.map((o) => {
+              const opt = el("option", { value: o, text: o });
+              if (o === draft.specific) opt.setAttribute("selected", "selected");
+              return opt;
+            })
+          )
+        ])
+      );
+    }
+    if (!power.specifyPerLevel) {
+      const maxLevel = superpowerMaxLevel(power);
+      fields.push(
+        el("div", { class: "field" }, [
+          el("label", { text: "Level" }),
+          el("input", {
+            type: "number",
+            min: "1",
+            ...Number.isFinite(maxLevel) ? { max: String(maxLevel) } : {},
+            value: draft.level,
+            onchange: (e) => {
+              draft.level = Math.max(1, Math.floor(num(e.target.value, 1)));
+              rerenderStep();
+            }
+          })
+        ])
+      );
+    }
+    const unit = superpowerUnitCost(power, draft.variant, chars);
+    const level = power.specifyPerLevel ? draft.specifics.length : draft.level;
+    fields.push(el("div", { class: "field" }, [el("label", { text: "Cost" }), el("span", { text: `${unit * level} pts (${unit}/level)` })]));
+    fields.push(
+      el("button", {
+        class: "btn btn-small",
+        text: "Add",
+        onclick: () => {
+          const pick2 = { name: power.name, level, cost: unit * level };
+          if (power.variants) pick2.variant = draft.variant;
+          if (specifyOptions) pick2.specifics = power.specifyPerLevel ? [...draft.specifics] : [draft.specific];
+          try {
+            buildPowerSetManual(slot.level, slot.typeId, chars, [...slot.picks, pick2]);
+          } catch (err) {
+            return showError(err.message);
+          }
+          slot.picks.push(pick2);
+          delete state.superpowerDrafts[i];
+          rerenderStep();
+        }
+      })
     );
-    container.appendChild(el("div", {}, slotRows));
+    wrap.appendChild(el("p", { class: "readonly-note", text: power.summary }));
+    wrap.appendChild(el("div", { class: "field-row" }, fields));
+    if (power.specifyPerLevel) {
+      const grid = el("div", { class: "power-picker-grid" });
+      for (const o of specifyOptions) {
+        grid.appendChild(
+          el("label", { class: "toggle" }, [
+            el("input", {
+              type: "checkbox",
+              ...draft.specifics.includes(o) ? { checked: "checked" } : {},
+              onchange: (e) => {
+                draft.specifics = e.target.checked ? [...draft.specifics, o] : draft.specifics.filter((x) => x !== o);
+                rerenderStep();
+              }
+            }),
+            ` ${o}`
+          ])
+        );
+      }
+      wrap.appendChild(grid);
+    }
+    return wrap;
   }
   function finalizePowersStep() {
-    if (state.powerSlotChoices.some((s) => !s.typeId)) throw new Error("Choose a power type for every power set.");
+    const chars = state.baseCharacteristics;
+    state.powerSlotChoices.forEach((slot, i) => {
+      if (!slot.typeId) throw new Error("Choose a power type for every power set.");
+      try {
+        buildPowerSetManual(slot.level, slot.typeId, chars, slot.picks);
+      } catch (err) {
+        throw new Error(`Power set ${i + 1} (${findPowerType(slot.typeId).name}): ${err.message}`);
+      }
+    });
   }
   function renderAgeStep(container) {
     if (state.age == null) state.age = rollStartingAge();
@@ -2373,12 +3656,12 @@
           "div",
           {},
           state.oldPenaltyPicks.map(
-            (pick, i) => el(
+            (pick2, i) => el(
               "select",
               { onchange: (e) => state.oldPenaltyPicks[i] = e.target.value },
               OLD_AGE_PENALTY_CHARACTERISTICS.map((c) => {
                 const opt = el("option", { value: c, text: c });
-                if (c === pick) opt.setAttribute("selected", "selected");
+                if (c === pick2) opt.setAttribute("selected", "selected");
                 return opt;
               })
             )
@@ -2394,12 +3677,12 @@
           "div",
           {},
           state.youngPenaltyPicks.map(
-            (pick, i) => el(
+            (pick2, i) => el(
               "select",
               { onchange: (e) => state.youngPenaltyPicks[i] = e.target.value },
               eligible.map((c) => {
                 const opt = el("option", { value: c, text: c });
-                if (c === pick) opt.setAttribute("selected", "selected");
+                if (c === pick2) opt.setAttribute("selected", "selected");
                 return opt;
               })
             )
@@ -2422,19 +3705,23 @@
     }
   }
   function personalitySpecialtyPicks(personality, rng = Math.random) {
-    const picks = { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [] };
+    const picks = { craftChoices: [], knowledgeChoices: [], technicalChoices: [], languageChoices: [], combatChoices: [], fixedSpecialties: {} };
+    for (const ref of personality.skills.filter(refNeedsSpecialtyChoice)) {
+      const options = specOptions(baseSkillName(ref));
+      picks.fixedSpecialties[ref] = options[Math.floor(rng() * options.length)];
+    }
     const bases = { craftChoices: "Craft", knowledgeChoices: "Knowledge", technicalChoices: "Technical Skill", languageChoices: "Language" };
     for (const [key, base] of Object.entries(bases)) {
       const count = personality[key] ?? 0;
       for (let i = 0; i < count; i++) {
-        const options = specialtyOptionsFor(base) ?? [];
-        const pick = options[Math.floor(rng() * options.length)];
-        picks[key].push(`${base} (${pick})`);
+        const options = specOptions(base) ?? [];
+        const pick2 = options[Math.floor(rng() * options.length)];
+        picks[key].push(`${base} (${pick2})`);
       }
     }
     const combatCount = personality.combatChoices ?? 0;
     const fixedBases = new Set(personality.skills.map(baseSkillName));
-    const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b));
+    const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b) && skillFits(b, era()));
     const usedBases = /* @__PURE__ */ new Set();
     for (let i = 0; i < combatCount; i++) {
       const pool = availableBases.filter((b) => !usedBases.has(b));
@@ -2492,6 +3779,25 @@
     const type = PERSONALITY_TYPES.find((p) => p.id === state.personalityTypeId);
     container.appendChild(el("p", { class: "readonly-note", text: type.description }));
     container.appendChild(el("p", { class: "readonly-note", text: `Fixed skills (+20 each): ${type.skills.join(", ")}` }));
+    const fixedOpen = type.skills.filter(refNeedsSpecialtyChoice);
+    if (fixedOpen.length) {
+      container.appendChild(
+        el(
+          "div",
+          { class: "choice-pool" },
+          [el("div", { class: "choice-pool-title", text: "Specialty for each fixed skill" })].concat(
+            fixedOpen.map(
+              (ref) => el("label", { class: "choice-item" }, [
+                `${ref}: `,
+                specialtySelect(baseSkillName(ref), state.personalityPicks.fixedSpecialties[ref], (v) => {
+                  state.personalityPicks.fixedSpecialties[ref] = v;
+                })
+              ])
+            )
+          )
+        )
+      );
+    }
     const bases = { craftChoices: "Craft", knowledgeChoices: "Knowledge", technicalChoices: "Technical Skill", languageChoices: "Language" };
     for (const [key, base] of Object.entries(bases)) {
       const count = type[key] ?? 0;
@@ -2513,7 +3819,7 @@
     }
     if (type.combatChoices) {
       const fixedBases = new Set(type.skills.map(baseSkillName));
-      const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b));
+      const availableBases = COMBAT_SKILL_NAMES.filter((b) => !fixedBases.has(b) && skillFits(b, era()));
       const picks = state.personalityPicks.combatChoices;
       container.appendChild(
         el(
@@ -2535,7 +3841,7 @@
         onchange: (e) => {
           const base = e.target.value;
           const skillDef2 = findSkill(base);
-          picks[i] = skillDef2?.specialty ? resolveSkillDisplayNameManual(`${base} (any)`, specialtyOptionsFor(base)[0]) : base;
+          picks[i] = skillDef2?.specialty ? resolveSkillDisplayNameManual(`${base} (any)`, specOptions(base)[0]) : base;
           rerenderStep();
         }
       },
@@ -2548,7 +3854,7 @@
     const wrap = el("span", { class: "choice-item" }, [baseSelect]);
     const skillDef = findSkill(currentBase);
     if (skillDef?.specialty) {
-      const currentSpecialty = current.includes("(") ? parseSkillRef(current).specialty : specialtyOptionsFor(currentBase)[0];
+      const currentSpecialty = current.includes("(") ? parseSkillRef(current).specialty : specOptions(currentBase)[0];
       wrap.appendChild(specialtySelect(currentBase, currentSpecialty, (v) => {
         picks[i] = `${currentBase} (${v})`;
       }));
@@ -2563,7 +3869,7 @@
     wrap.appendChild(el("p", { class: "readonly-note", text: `Choose exactly ${PERSONALITY_SKILL_COUNT} skills to each receive +20. Specialty skills need a specialty chosen too.` }));
     wrap.appendChild(el("p", { class: "budget-line", text: `Selected: ${state.personalityCustomSkills.length} / ${PERSONALITY_SKILL_COUNT}` }));
     const grid = el("div", { class: "wizard-skill-alloc" });
-    for (const skillDef of SKILLS.filter((s) => !s.specialty)) {
+    for (const skillDef of SKILLS.filter((s) => !s.specialty && skillFits(s.name, era()))) {
       const checked = state.personalityCustomSkills.includes(skillDef.name);
       grid.appendChild(
         el("label", { class: "toggle" }, [
@@ -2616,17 +3922,17 @@
     return wrap;
   }
   function renderAddSpecialtySkillControl(onAdd) {
-    const specialtySkills = SKILLS.filter((s) => s.specialty);
+    const specialtySkills = SKILLS.filter((s) => s.specialty && skillFits(s.name, era()));
     const baseSelect = el(
       "select",
       {},
       specialtySkills.map((s) => el("option", { value: s.name, text: s.name }))
     );
-    let specialtySelectEl = specialtySelect(specialtySkills[0].name, specialtyOptionsFor(specialtySkills[0].name)?.[0], () => {
+    let specialtySelectEl = specialtySelect(specialtySkills[0].name, specOptions(specialtySkills[0].name)?.[0], () => {
     });
     const container = el("span", { class: "add-skill-row" }, [baseSelect, specialtySelectEl]);
     baseSelect.addEventListener("change", () => {
-      const newSelect = specialtySelect(baseSelect.value, specialtyOptionsFor(baseSelect.value)?.[0], () => {
+      const newSelect = specialtySelect(baseSelect.value, specOptions(baseSelect.value)?.[0], () => {
       });
       container.replaceChild(newSelect, specialtySelectEl);
       specialtySelectEl = newSelect;
@@ -2649,9 +3955,12 @@
     }
   }
   function renderProfessionStep(container) {
-    if (!state.professionName) {
-      state.professionName = PROFESSIONS[0].name;
+    const allowed = allowedProfessions();
+    if (!state.professionName || !allowed.some((p) => p.name === state.professionName)) {
+      state.professionName = allowed[0].name;
       state.professionChoiceSelections = findProfession(state.professionName).choices.map(() => []);
+      state.professionSpecialtyChoices = {};
+      state.professionSubstitutions = {};
     }
     const profession = findProfession(state.professionName);
     const select = el(
@@ -2662,6 +3971,7 @@
           const p = findProfession(state.professionName);
           state.professionChoiceSelections = p.choices.map(() => []);
           state.professionSpecialtyChoices = {};
+          state.professionSubstitutions = {};
           state.skillEntries = null;
           state.professionalAllocations = {};
           state.personalAllocations = {};
@@ -2669,7 +3979,7 @@
           rerenderStep();
         }
       },
-      [...PROFESSIONS].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
+      [...allowed].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
         const opt = el("option", { value: p.name, text: p.name });
         if (p.name === state.professionName) opt.setAttribute("selected", "selected");
         return opt;
@@ -2678,12 +3988,12 @@
     container.appendChild(el("div", { class: "field-row" }, [el("div", { class: "field" }, [el("label", { text: "Profession" }), select])]));
     container.appendChild(el("p", { class: "readonly-note", text: profession.description }));
     if (profession.special) container.appendChild(el("p", { class: "readonly-note", html: `<strong>Special:</strong> ${profession.special}` }));
-    const openFixedRefs = profession.fixed.filter(refNeedsSpecialtyChoice);
+    const openFixedRefs = profession.fixed.filter((r) => refNeedsSpecialtyChoice(r) && specOptions(parseSkillRef(r).base).length);
     if (openFixedRefs.length > 0) {
       container.appendChild(el("div", { class: "choice-pool-title", text: "Choose specialties for this profession's fixed skills:" }));
       for (const ref of openFixedRefs) {
         const base = parseSkillRef(ref).base;
-        const current = state.professionSpecialtyChoices[ref] ?? specialtyOptionsFor(base)[0];
+        const current = state.professionSpecialtyChoices[ref] ?? specOptions(base)[0];
         state.professionSpecialtyChoices[ref] = current;
         container.appendChild(
           el("div", { class: "choice-item" }, [`${ref}: `, specialtySelect(base, current, (v) => state.professionSpecialtyChoices[ref] = v)])
@@ -2693,7 +4003,52 @@
     const plainFixed = profession.fixed.filter((r) => !refNeedsSpecialtyChoice(r));
     if (plainFixed.length > 0) container.appendChild(el("p", { class: "readonly-note", text: `Fixed skills: ${plainFixed.join(", ")}` }));
     profession.choices.forEach((choice, i) => renderChoicePool(container, profession, choice, i));
+    const misfits = professionMisfits(profession);
+    if (misfits.length) {
+      const pool = el("div", { class: "choice-pool" }, [
+        el("div", { class: "choice-pool-title", text: "Not in this setting: choose a substitute (core book p.22)" })
+      ]);
+      for (const { ref, name, options } of misfits) {
+        const select2 = el(
+          "select",
+          { onchange: (e) => {
+            state.professionSubstitutions[ref] = e.target.value;
+            rerenderStep();
+          } },
+          options.map((o) => {
+            const opt = el("option", { value: o, text: o });
+            if (o === state.professionSubstitutions[ref]) opt.setAttribute("selected", "selected");
+            return opt;
+          })
+        );
+        pool.appendChild(el("div", { class: "choice-item" }, [`${name} \u2192 `, select2]));
+      }
+      container.appendChild(pool);
+    }
     container.appendChild(renderSkillPointAllocation(profession));
+  }
+  function professionMisfits(profession) {
+    const refs = [...profession.fixed, ...state.professionChoiceSelections.flat().filter(Boolean)];
+    const taken = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const ref of refs) {
+      const open = refNeedsSpecialtyChoice(ref);
+      const name = open && !specOptions(parseSkillRef(ref).base).length ? ref : resolveSkillDisplayNameManual(ref, open ? state.professionSpecialtyChoices[ref] : null);
+      if (!name) continue;
+      if (skillFits(name, era())) {
+        taken.add(name);
+        continue;
+      }
+      const options = substituteOptions(name, era(), taken);
+      if (!options.length) continue;
+      if (!options.includes(state.professionSubstitutions[ref])) state.professionSubstitutions[ref] = options[0];
+      taken.add(state.professionSubstitutions[ref]);
+      out.push({ ref, name, options });
+    }
+    return out;
+  }
+  function professionSettingArgs() {
+    return { era: era(), substitutions: state.professionSubstitutions };
   }
   function poolNeedsRepeats(choice) {
     const isWildcard = choice.from.length === 1 && /^Any skill/i.test(choice.from[0]);
@@ -2712,7 +4067,7 @@
         {
           onchange: (e) => {
             const base = e.target.value;
-            const options2 = specialtyOptionsFor(base) ?? [];
+            const options2 = specOptions(base) ?? [];
             selected[slotIdx] = options2.length ? `${base} (${options2[0]})` : base;
             rerenderStep();
           }
@@ -2724,7 +4079,7 @@
         })
       );
       row.appendChild(baseSelect);
-      const options = specialtyOptionsFor(currentBase);
+      const options = specOptions(currentBase);
       if (options && options.length > 0) {
         const currentSpecialty = current ? parseSkillRef(current).specialty : options[0];
         if (!current) selected[slotIdx] = `${currentBase} (${currentSpecialty})`;
@@ -2803,12 +4158,13 @@
                 rerenderStep();
               }
             }),
-            ` ${ref}`
+            ` ${ref}`,
+            skillFits(ref, era()) ? "" : el("span", { class: "readonly-note", text: " (not in this setting: gets a substitute)" })
           ])
         );
-        if (isChecked && refNeedsSpecialtyChoice(ref)) {
+        if (isChecked && refNeedsSpecialtyChoice(ref) && specOptions(parseSkillRef(ref).base).length) {
           const base = parseSkillRef(ref).base;
-          const current = state.professionSpecialtyChoices[ref] ?? specialtyOptionsFor(base)[0];
+          const current = state.professionSpecialtyChoices[ref] ?? specOptions(base)[0];
           state.professionSpecialtyChoices[ref] = current;
           row.appendChild(specialtySelect(base, current, (v) => state.professionSpecialtyChoices[ref] = v));
         }
@@ -2821,14 +4177,14 @@
     const baseSelect = el(
       "select",
       {},
-      SKILLS.map((s) => el("option", { value: s.name, text: s.name }))
+      SKILLS.filter((s) => skillFits(s.name, era())).map((s) => el("option", { value: s.name, text: s.name }))
     );
     let specialtyEl = null;
     const container = el("span", { class: "add-skill-row" }, [baseSelect]);
     const syncSpecialty = () => {
       if (specialtyEl) container.removeChild(specialtyEl);
       const skillDef = findSkill(baseSelect.value);
-      specialtyEl = skillDef?.specialty ? specialtySelect(baseSelect.value, specialtyOptionsFor(baseSelect.value)?.[0], () => {
+      specialtyEl = skillDef?.specialty ? specialtySelect(baseSelect.value, specOptions(baseSelect.value)?.[0], () => {
       }) : null;
       if (specialtyEl) container.insertBefore(specialtyEl, container.lastChild);
     };
@@ -2850,7 +4206,7 @@
     const skillOptions = skillOptionsForState();
     const entries = baselineSkillEntries(state.characteristics, skillOptions);
     try {
-      const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+      const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
       for (const name of names) ensureSkillEntry(entries, name, state.characteristics, skillOptions);
     } catch {
     }
@@ -2878,7 +4234,7 @@
     const professionalCap = professionalSkillCap(level);
     let professionSkillNames = [];
     try {
-      professionSkillNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+      professionSkillNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
     } catch {
       professionSkillNames = [];
     }
@@ -2941,7 +4297,7 @@
   }
   function finalizeProfessionStep() {
     const profession = findProfession(state.professionName);
-    const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+    const names = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
     const skillOptions = skillOptionsForState();
     const entries = baselineSkillEntries(state.characteristics, skillOptions);
     for (const name of names) ensureSkillEntry(entries, name, state.characteristics, skillOptions);
@@ -3047,9 +4403,9 @@
       hitLocationOption: state.options.useHitLocation
     });
     const profession = findProfession(state.professionName);
-    const powers = state.options.usePowers ? buildPowersBlockManual(derived.powerPoints, state.powerSlotChoices) : null;
+    const powers = state.options.usePowers ? buildPowersBlockManual(derived.powerPoints, state.powerSlotChoices, state.baseCharacteristics) : null;
     return assembleCharacter({
-      name: state.name,
+      name: state.name.trim() || randomName(state.gender),
       gender: state.gender,
       age: state.age,
       professionName: profession.name,
@@ -3106,9 +4462,9 @@
           guard++;
           const affordable = CHARACTERISTICS.filter((c) => c !== "EDU" && state.characteristics[c] < 21 && state.pointBuySpent + POINT_BUY_COST[c] <= budget);
           if (!affordable.length) break;
-          const pick = affordable[Math.floor(Math.random() * affordable.length)];
-          state.characteristics[pick] += 1;
-          state.pointBuySpent += POINT_BUY_COST[pick];
+          const pick2 = affordable[Math.floor(Math.random() * affordable.length)];
+          state.characteristics[pick2] += 1;
+          state.pointBuySpent += POINT_BUY_COST[pick2];
         }
       }
       if (state.options.useEDU) state.characteristics.EDU = roll2d6plus6();
@@ -3116,8 +4472,9 @@
       const level = state.options.campaignPowerLevel;
       const options = powerSetOptionsFor(level);
       state.powerOptionIndex = Math.floor(Math.random() * options.length);
-      const assignments = assignPowerTypes(options[state.powerOptionIndex]);
-      state.powerSlotChoices = assignments.map((a) => ({ level: a.level, typeId: a.type }));
+      const assignments = assignPowerTypes(options[state.powerOptionIndex], Math.random, { characteristics: state.baseCharacteristics });
+      state.powerSlotChoices = assignments.map((a) => newPowerSlot(a.level, a.type));
+      state.superpowerDrafts = {};
     } else if (id === "age") {
       state.age = rollStartingAge();
     } else if (id === "personality") {
@@ -3126,9 +4483,10 @@
       state.personalityTypeId = type.id;
       state.personalityPicks = personalitySpecialtyPicks(type);
     } else if (id === "profession") {
-      const profession = PROFESSIONS[Math.floor(Math.random() * PROFESSIONS.length)];
+      const allowed = allowedProfessions();
+      const profession = allowed[Math.floor(Math.random() * allowed.length)];
       state.professionName = profession.name;
-      const names = resolveProfessionSkills(profession);
+      const names = resolveProfessionSkills(profession, Math.random, era());
       state.professionChoiceSelections = profession.choices.map((choice) => {
         if (choice.from.length === 1 && /^Any skill/i.test(choice.from[0])) {
           const picks = [];
@@ -3141,7 +4499,7 @@
           const picks = [];
           for (let i = 0; i < choice.count; i++) {
             const base = bases[Math.floor(Math.random() * bases.length)];
-            const options = specialtyOptionsFor(base) ?? [];
+            const options = specOptions(base) ?? [];
             let name = options.length ? `${base} (${options[Math.floor(Math.random() * options.length)]})` : base;
             let attempts = 0;
             while (picks.includes(name) && attempts < 20 && options.length > 0) {
@@ -3159,13 +4517,17 @@
       for (const ref of [...profession.fixed, ...state.professionChoiceSelections.flat()]) {
         if (refNeedsSpecialtyChoice(ref)) {
           const base = parseSkillRef(ref).base;
-          const options = specialtyOptionsFor(base);
-          state.professionSpecialtyChoices[ref] = options[Math.floor(Math.random() * options.length)];
+          const options = specOptions(base);
+          if (options.length) state.professionSpecialtyChoices[ref] = options[Math.floor(Math.random() * options.length)];
         }
+      }
+      state.professionSubstitutions = {};
+      for (const m of professionMisfits(profession)) {
+        state.professionSubstitutions[m.ref] = m.options[Math.floor(Math.random() * m.options.length)];
       }
       state.personalExtraSkills = [];
       try {
-        const resolvedNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices);
+        const resolvedNames = resolveProfessionSkillsManual(profession, state.professionChoiceSelections, state.professionSpecialtyChoices, professionSettingArgs());
         const skillOptions = skillOptionsForState();
         const entries = baselineSkillEntries(state.characteristics, skillOptions);
         for (const n of resolvedNames) ensureSkillEntry(entries, n, state.characteristics, skillOptions);
@@ -3275,19 +4637,33 @@
   // js/ui/app.js
   var currentCharacter = null;
   var $2 = (id) => document.getElementById(id);
+  function populateSettingSelect() {
+    const select = $2("opt-setting");
+    for (const s of SETTINGS) {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.page ? `${s.name} (p.${s.page})` : s.name;
+      select.appendChild(opt);
+    }
+  }
   function populateProfessionSelect() {
     const select = $2("opt-profession");
-    for (const p of [...PROFESSIONS].sort((a, b) => a.name.localeCompare(b.name))) {
+    const current = select.value;
+    select.innerHTML = '<option value="">Random</option>';
+    const allowed = professionsForSetting($2("opt-setting").value);
+    for (const p of [...allowed].sort((a, b) => a.name.localeCompare(b.name))) {
       const opt = document.createElement("option");
       opt.value = p.name;
       opt.textContent = p.name;
       select.appendChild(opt);
     }
+    select.value = allowed.some((p) => p.name === current) ? current : "";
   }
   function readOptionsFromForm() {
     const options = defaultOptions();
     options.campaignPowerLevel = $2("opt-campaign-level").value;
     options.characteristicMethod = $2("opt-char-method").value;
+    options.setting = $2("opt-setting").value || "any";
     const professionValue = $2("opt-profession").value;
     options.profession = professionValue || null;
     const ageValue = $2("opt-age").value;
@@ -3367,6 +4743,15 @@
     });
     $2("wizard-panel").scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
+  var copyLabelTimer = null;
+  async function copyMarkdown() {
+    if (!currentCharacter) return;
+    const button = $2("btn-copy-md");
+    const ok = await copyMarkdownToClipboard(currentCharacter);
+    button.textContent = ok ? "\u2713 Copied" : "Copy failed";
+    clearTimeout(copyLabelTimer);
+    copyLabelTimer = setTimeout(() => button.textContent = "\u{1F4CB} Copy Markdown", 1500);
+  }
   function wireEvents() {
     $2("btn-generate").addEventListener("click", generate);
     $2("btn-regenerate").addEventListener("click", generate);
@@ -3385,6 +4770,7 @@
       renderSavedList();
     });
     $2("btn-export-json").addEventListener("click", () => currentCharacter && exportToJson(currentCharacter));
+    $2("btn-copy-md").addEventListener("click", copyMarkdown);
     $2("btn-export-md").addEventListener("click", () => currentCharacter && exportToMarkdown(currentCharacter));
     $2("btn-export-pdf").addEventListener("click", () => currentCharacter && exportToPdf(currentCharacter));
     $2("toggle-settings").addEventListener("click", () => {
@@ -3398,7 +4784,9 @@
     });
   }
   function init() {
+    populateSettingSelect();
     populateProfessionSelect();
+    $2("opt-setting").addEventListener("change", populateProfessionSelect);
     wireEvents();
     renderSavedList();
     $2("storage-warning").hidden = isStoragePersistent();

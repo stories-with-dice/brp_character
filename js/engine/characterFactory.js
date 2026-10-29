@@ -1,4 +1,4 @@
-import { PROFESSIONS, findProfession } from "../data/professions.js";
+import { findProfession } from "../data/professions.js";
 import { CHARACTERISTICS, GENERATION_METHODS } from "./characteristics.js";
 import { generateCharacteristics } from "./characteristicsRandom.js";
 import { computeDerived } from "./derived.js";
@@ -14,6 +14,8 @@ import { SKILLS } from "../data/skills.js";
 import { resolveSkillDisplayName } from "./skillRef.js";
 import { roll2d6plus6 } from "./dice.js";
 import { assembleCharacter } from "./characterAssembly.js";
+import { randomName } from "./names.js";
+import { settingEra, skillFits, professionsForSetting } from "./settingFilter.js";
 
 /** @typedef {object} GenerationOptions
  * @property {'Normal'|'Heroic'|'Epic'|'Superhuman'} campaignPowerLevel
@@ -30,9 +32,11 @@ import { assembleCharacter } from "./characterAssembly.js";
  * @property {boolean} useIncreasedPersonalPoints
  * @property {boolean} useAgeModifiers
  * @property {boolean} usePowers
+ * @property {string} setting campaign setting id (data/settings.js), "any" = no filter;
+ *   filters the random profession and every skill (engine/settingFilter.js)
  * @property {string|null} profession profession name, or null to pick randomly
  * @property {number|null} age fixed age, or null to roll 17+1D6
- * @property {string} name
+ * @property {string} name blank -> a random name
  * @property {string} gender
  */
 
@@ -52,6 +56,7 @@ export function defaultOptions() {
     useIncreasedPersonalPoints: false,
     useAgeModifiers: true,
     usePowers: false,
+    setting: "any",
     profession: null,
     age: null,
     name: "",
@@ -59,8 +64,8 @@ export function defaultOptions() {
   };
 }
 
-function extraPersonalSkillSlots(rng, exclude) {
-  const pool = SKILLS.filter((s) => !exclude.has(s.name));
+function extraPersonalSkillSlots(rng, exclude, era = null) {
+  const pool = SKILLS.filter((s) => !exclude.has(s.name) && skillFits(s.name, era));
   const count = 5 + Math.floor(rng() * 6); // 5..10
   const names = [];
   const working = [...pool];
@@ -68,7 +73,7 @@ function extraPersonalSkillSlots(rng, exclude) {
     const idx = Math.floor(rng() * working.length);
     const skillDef = working.splice(idx, 1)[0];
     const ref = skillDef.specialty ? `${skillDef.name} (any)` : skillDef.name;
-    const display = resolveSkillDisplayName(ref, rng);
+    const display = resolveSkillDisplayName(ref, rng, era);
     if (display) names.push(display);
   }
   return names;
@@ -85,8 +90,9 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
   let chars = generateCharacteristics(options.characteristicMethod, rng, level);
   if (options.useEDU) chars.EDU = roll2d6plus6(rng);
 
-  // Step Two: Powers (groundwork) -- resolved after characteristics since it
-  // needs POW; applied after derived stats are computed below.
+  // Step Two: Powers -- the starting rules use these unmodified
+  // characteristics (before age reductions); built after derived stats below.
+  const baseChars = { ...chars };
 
   // Step Three: Age & Experience
   let age = options.age ?? rollStartingAge(rng);
@@ -115,15 +121,17 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
     hitLocationOption: options.useHitLocation,
   });
 
-  const powers = options.usePowers ? buildPowersBlock(level, derived.powerPoints, rng) : null;
+  const powers = options.usePowers ? buildPowersBlock(level, derived.powerPoints, baseChars, rng) : null;
 
   // Step Seven: Profession (skill list only, points spent after personality)
-  const professionName = options.profession ?? PROFESSIONS[Math.floor(rng() * PROFESSIONS.length)].name;
+  const era = settingEra(options.setting);
+  const allowed = professionsForSetting(options.setting);
+  const professionName = options.profession ?? allowed[Math.floor(rng() * allowed.length)].name;
   const profession = findProfession(professionName);
   if (!profession) throw new Error(`Unknown profession: ${professionName}`);
-  const professionSkillNames = resolveProfessionSkills(profession, rng);
+  const professionSkillNames = resolveProfessionSkills(profession, rng, era);
 
-  const skillOptions = { useCategoryBonus: options.useCategoryBonus, categoryBonusMethod: options.categoryBonusMethod, usePowers: options.usePowers };
+  const skillOptions = { useCategoryBonus: options.useCategoryBonus, categoryBonusMethod: options.categoryBonusMethod, usePowers: options.usePowers, era };
   const entries = baselineSkillEntries(chars, skillOptions);
   for (const name of professionSkillNames) ensureSkillEntry(entries, name, chars, skillOptions);
 
@@ -132,7 +140,7 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
   let personality = null;
   if (options.usePersonality) {
     const type = rollPersonalityType(rng);
-    const personalitySkillNames = resolvePersonalitySkills(type, rng);
+    const personalitySkillNames = resolvePersonalitySkills(type, rng, era);
     for (const name of personalitySkillNames) {
       const entry = ensureSkillEntry(entries, name, chars, skillOptions);
       entry.personalityBonus += PERSONALITY_BONUS;
@@ -154,7 +162,7 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
   const personalPool = personalSkillPointPool(chars.INT, level, { increasedOption: options.useIncreasedPersonalPoints });
   const personalCap = personalSkillCap(level);
   const alreadyNamed = new Set(Object.keys(entries));
-  const extraNames = extraPersonalSkillSlots(rng, alreadyNamed);
+  const extraNames = extraPersonalSkillSlots(rng, alreadyNamed, era);
   for (const name of extraNames) ensureSkillEntry(entries, name, chars, skillOptions);
   const personalCandidateKeys = [...new Set([...professionSkillNames, ...(personality?.skills ?? []), ...extraNames])];
   const personalSlots = personalCandidateKeys.map((name) => ({
@@ -170,7 +178,7 @@ export function generateRandomCharacter(userOptions = {}, rng = Math.random) {
   const wealth = pickWealthLevel(profession.wealth, rng);
 
   return assembleCharacter({
-    name: options.name,
+    name: options.name || randomName(options.gender, rng),
     gender: options.gender,
     age,
     professionName: profession.name,

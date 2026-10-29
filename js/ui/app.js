@@ -1,28 +1,46 @@
 import { generateRandomCharacter, defaultOptions } from "../engine/characterFactory.js";
-import { PROFESSIONS } from "../data/professions.js";
+import { SETTINGS } from "../data/settings.js";
+import { professionsForSetting } from "../engine/settingFilter.js";
 import { renderCharacterSheet } from "./render.js";
 import { loadAllCharacters, saveCharacter, deleteCharacter, newCharacterId, isStoragePersistent } from "./storage.js";
-import { exportToJson, exportToMarkdown, exportToPdf } from "./export.js";
+import { exportToJson, exportToMarkdown, exportToPdf, copyMarkdownToClipboard } from "./export.js";
 import { startWizard } from "./wizard.js";
 
 let currentCharacter = null;
 
 const $ = (id) => document.getElementById(id);
 
+function populateSettingSelect() {
+  const select = $("opt-setting");
+  for (const s of SETTINGS) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.page ? `${s.name} (p.${s.page})` : s.name;
+    select.appendChild(opt);
+  }
+}
+
+// Only the professions of the chosen setting; a choice the new setting
+// does not allow goes back to Random.
 function populateProfessionSelect() {
   const select = $("opt-profession");
-  for (const p of [...PROFESSIONS].sort((a, b) => a.name.localeCompare(b.name))) {
+  const current = select.value;
+  select.innerHTML = '<option value="">Random</option>';
+  const allowed = professionsForSetting($("opt-setting").value);
+  for (const p of [...allowed].sort((a, b) => a.name.localeCompare(b.name))) {
     const opt = document.createElement("option");
     opt.value = p.name;
     opt.textContent = p.name;
     select.appendChild(opt);
   }
+  select.value = allowed.some((p) => p.name === current) ? current : "";
 }
 
 function readOptionsFromForm() {
   const options = defaultOptions();
   options.campaignPowerLevel = $("opt-campaign-level").value;
   options.characteristicMethod = $("opt-char-method").value;
+  options.setting = $("opt-setting").value || "any";
   const professionValue = $("opt-profession").value;
   options.profession = professionValue || null;
   const ageValue = $("opt-age").value;
@@ -109,6 +127,17 @@ function startWizardFlow() {
   $("wizard-panel").scrollIntoView?.({ behavior: "smooth", block: "start" });
 }
 
+let copyLabelTimer = null;
+
+async function copyMarkdown() {
+  if (!currentCharacter) return;
+  const button = $("btn-copy-md");
+  const ok = await copyMarkdownToClipboard(currentCharacter);
+  button.textContent = ok ? "✓ Copied" : "Copy failed";
+  clearTimeout(copyLabelTimer);
+  copyLabelTimer = setTimeout(() => (button.textContent = "📋 Copy Markdown"), 1500);
+}
+
 function wireEvents() {
   $("btn-generate").addEventListener("click", generate);
   $("btn-regenerate").addEventListener("click", generate);
@@ -130,6 +159,7 @@ function wireEvents() {
   });
 
   $("btn-export-json").addEventListener("click", () => currentCharacter && exportToJson(currentCharacter));
+  $("btn-copy-md").addEventListener("click", copyMarkdown);
   $("btn-export-md").addEventListener("click", () => currentCharacter && exportToMarkdown(currentCharacter));
   $("btn-export-pdf").addEventListener("click", () => currentCharacter && exportToPdf(currentCharacter));
 
@@ -146,7 +176,9 @@ function wireEvents() {
 }
 
 function init() {
+  populateSettingSelect();
   populateProfessionSelect();
+  $("opt-setting").addEventListener("change", populateProfessionSelect);
   wireEvents();
   renderSavedList();
   $("storage-warning").hidden = isStoragePersistent();

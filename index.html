@@ -53,6 +53,11 @@
         </div>
 
         <div class="setting-group">
+          <label for="opt-setting">Setting</label>
+          <select id="opt-setting" title="Limits professions and skills to the setting (core book Chapter 10). Any = no limit."></select>
+        </div>
+
+        <div class="setting-group">
           <label for="opt-profession">Profession</label>
           <select id="opt-profession">
             <option value="">Random</option>
@@ -66,7 +71,7 @@
 
         <div class="setting-group">
           <label for="opt-name">Name</label>
-          <input type="text" id="opt-name" placeholder="(optional)" />
+          <input type="text" id="opt-name" placeholder="(random if blank)" />
         </div>
 
         <div class="setting-group">
@@ -95,7 +100,7 @@
           <label class="toggle"><input type="checkbox" id="opt-fatigue" /> Fatigue Points</label>
           <label class="toggle"><input type="checkbox" id="opt-sanity" /> Sanity Points</label>
 
-          <label class="toggle"><input type="checkbox" id="opt-powers" /> Powers (Step Two) &mdash; groundwork only</label>
+          <label class="toggle"><input type="checkbox" id="opt-powers" /> Powers (Step Two)</label>
         </fieldset>
 
       </div>
@@ -131,6 +136,7 @@
         <span class="spacer"></span>
         <button id="btn-save" class="btn btn-small btn-secondary">💾 Save</button>
         <button id="btn-export-json" class="btn btn-small">Export JSON</button>
+        <button id="btn-copy-md" class="btn btn-small" title="Copy the Markdown sheet, ready to paste into RPG Keeper">📋 Copy Markdown</button>
         <button id="btn-export-md" class="btn btn-small">Export Markdown</button>
         <button id="btn-export-pdf" class="btn btn-small">Export PDF</button>
       </div>

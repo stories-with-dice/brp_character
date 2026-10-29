@@ -1,19 +1,23 @@
 import { SKILLS } from "../data/skills.js";
 import { evaluateSkillFormula } from "./skillFormula.js";
 import { computeCategoryBonuses } from "./categoryBonus.js";
+import { skillFits } from "./settingFilter.js";
 
 /** Build baseline entries for every non-specialty skill (Dodge, Climb, Brawl,
  * Persuade, etc.) -- the ones listed once on the character sheet with a fixed
  * base chance. Specialty skills (Art, Craft, Knowledge, Firearm, ...) are
- * handled separately as concrete named instances once a specialty is chosen. */
+ * handled separately as concrete named instances once a specialty is chosen.
+ * With a setting `era` (settings.js ERAS), a skill of a later era is left off
+ * the sheet (Psychotherapy before the Industrial Age). */
 export function baselineSkillEntries(chars, options = {}) {
-  const { useCategoryBonus = false, categoryBonusMethod = "full", usePowers = false } = options;
+  const { useCategoryBonus = false, categoryBonusMethod = "full", usePowers = false, era = null } = options;
   const categoryBonuses = useCategoryBonus ? computeCategoryBonuses(chars, categoryBonusMethod) : null;
 
   const entries = {};
   for (const skill of SKILLS) {
     if (skill.specialty) continue;
     if (skill.optionOnly === "powers" && !usePowers) continue;
+    if (!skillFits(skill.name, era)) continue;
     const candidates = evaluateSkillFormula(skill.base, chars);
     const base = candidates[skill.formulaDefaultIndex ?? 0];
     entries[skill.name] = {

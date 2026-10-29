@@ -22,13 +22,17 @@ js/data/      static rules data (skills, professions, personality types, powers,
               No logic — just lists/tables extracted from the rulebook.
 js/engine/    pure functions: dice, characteristics, derived stats, skill formulas/allocation,
               profession/personality/powers resolution (both random and manual variants), age
-              modifiers, wealth. No DOM access. Runs identically in Node and the browser.
+              modifiers, wealth, the campaign setting filter (settingFilter.js). No DOM access.
+              Runs identically in Node and the browser.
 js/ui/        DOM-only glue: app.js (wires the "Quick Random" flow + saved-character list + settings
               panel), wizard.js (the step-by-step manual flow), render.js (character sheet rendering,
               shared `el()` DOM helper), export.js (JSON/Markdown/PDF), storage.js (localStorage with
               an in-memory fallback for opaque-origin contexts).
 js/lib/       vendored third-party libraries (jsPDF), loaded via classic <script> in index.html.
 js/dist/      build output (esbuild bundles js/ui/app.js -> bundle.js). Regenerate, don't hand-edit.
+tools/        Python CLI, not part of the app: extract_monsters.py (PDF stat blocks -> RPG Keeper
+              content pack in build/, gitignored) and encounter_level.py (the Encounter Level model).
+              See docs/encounter-level.md.
 ```
 
 **Golden rule**: `js/engine` and `js/data` never import from `js/ui`, and never touch `document`/`window`/`localStorage`. This is what makes the engine layer unit-testable in plain Node and reusable identically by both the random generator (`characterFactory.js`) and the manual wizard (`wizard.js`).
@@ -42,6 +46,14 @@ Every "resolve this randomly" engine function (e.g. `resolveProfessionSkills`, `
 Profession/personality data files reference skills as strings like `"Firearm (Rifle)"`, `"Craft (any)"`, `"Melee Weapon (any)"`, or bare `"Etiquette"`. `engine/skillRef.js` is the single source of truth for parsing these (`parseSkillRef`), detecting when a concrete specialty still needs to be chosen (`refNeedsSpecialtyChoice`), listing the valid specialty options (`specialtyOptionsFor`), and resolving to a final display name either randomly (`resolveSkillDisplayName`) or from a player's pick (`resolveSkillDisplayNameManual`). A skill with `specialty: "open"` or `"weaponClass"` in `data/skills.js` always needs resolution even when written bare (no parens) — e.g. `"Etiquette"` alone still needs a group chosen, matching the book's "specialty: by group" note.
 
 **Known data quirk**: some profession choice pools have fewer distinct refs than the count required (e.g. Artist's "choose 2" from a pool of just `["Art (any)"]"`, meaning two different Art specialties). Both `resolveProfessionSkills` and `resolveProfessionSkillsManual` handle this (sampling with replacement / accepting repeated base refs with different specialties), and `professionChoices.js`'s `validateChoiceSelection` accepts already-resolved concrete names against an `"(any)"` pool entry for this reason. If you touch this code path, re-run `tests/professionSkills.test.js` and `tests/professionChoices.test.js` — they lock in this behavior with regression tests naming the specific affected professions.
+
+**Specialty spellings**: the book writes some specialties two ways (the Chapter 3 "Specialties:" list says `Technical Skill (Computers)`, a profession says `Technical Skill (Computer Use)`). `SPECIALTY_ALIASES` in `data/skills.js` maps each variant to the Chapter 3 spelling, and `canonicalSpecialty()` in `engine/skillRef.js` applies it in both resolve functions, so one character never gets the same skill twice. Add a pair there when you find another one. Related rules: a personality's fixed skill with specialties (Charming's `Perform`, Brutal's `Ride`) always gets one (random, or `picks.fixedSpecialties` in the wizard); a profession's choice pool skips a skill the profession already has when the pool has other options; a real repeat (Entertainer's two `Language (Other)`) is numbered inside the specialty: `Language (Other 2)`. `tests/characterFactory.test.js` checks these over many random characters.
+
+**Campaign setting** (`options.setting`, an id of `data/settings.js` SETTINGS; `"any"` = no filter): each setting has an `era` (an index into ERAS) and a profession rule (`only`/`except`, plus `PROFESSION_MIN_ERA`). Each skill has an earliest era: `era` on a skill without specialties, `SPECIALTY_ERAS[base][specialty]` otherwise (unlisted = 0). `engine/settingFilter.js` is the single place that decides fit: `skillFits(name, era)`, `fittingSpecialties`, `professionsForSetting`, and the book's substitute rule (core p.22) as `substituteOptions`/`substituteSkill`. `specialtyOptionsFor(base, era)` filters specialty pickers. Every random path takes the era (`resolveProfessionSkills(profession, rng, era)`, `resolvePersonalitySkills(type, rng, era)`, `resolveSkillDisplayName(ref, rng, era)`, `baselineSkillEntries(chars, { era })`), and the manual path takes `{ era, substitutions }` in `resolveProfessionSkillsManual`. A new skill or specialty that is not timeless needs its era in `SPECIALTY_ERAS`. `tests/settingFilter.test.js` generates characters in every setting and checks that every skill fits.
+
+**Names**: a blank name becomes a random one (`engine/names.js`, lists in `data/names.js`) in both `generateRandomCharacter()` and the wizard's `buildFinalCharacter()`.
+
+**Markdown export** (`ui/export.js`, `characterToMarkdown`): the RPG Keeper BRP sheet. `# Name [BRP]`, then one line each of `STR: N; …` (sheet variables), `HP: x/x; PP: y/y; …` (resources, one Keeper tracker each), and `Major Wound: N; Move: N; …`. Never write a table or a code fence there: Keeper reads `Name: N` and `Name: x/y` from plain text.
 
 ## Testing
 

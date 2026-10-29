@@ -1,7 +1,8 @@
 import { PERSONALITY_TYPES, PERSONALITY_BONUS, PERSONALITY_SKILL_COUNT, findPersonalityType } from "../data/personality.js";
 import { SKILLS } from "../data/skills.js";
 import { rollDie } from "./dice.js";
-import { resolveSkillDisplayName, baseSkillName } from "./skillRef.js";
+import { resolveSkillDisplayName, resolveSkillDisplayNameManual, refNeedsSpecialtyChoice, baseSkillName } from "./skillRef.js";
+import { skillFits, substituteSkill } from "./settingFilter.js";
 
 export const COMBAT_SKILL_NAMES = SKILLS.filter((s) => s.category === "Combat").map((s) => s.name);
 const CRAFT_LIKE = { craftChoices: "Craft", knowledgeChoices: "Knowledge", technicalChoices: "Technical Skill", languageChoices: "Language" };
@@ -11,22 +12,30 @@ export function rollPersonalityType(rng = Math.random) {
 }
 
 /** Resolve a personality package into a flat list of skill display names that
- * each receive +20 (PERSONALITY_BONUS). */
-export function resolvePersonalitySkills(personality, rng = Math.random) {
-  const names = new Set(personality.skills);
+ * each receive +20 (PERSONALITY_BONUS). With a setting `era` (settings.js
+ * ERAS), specialties and combat skills come from that era; a fixed skill that
+ * does not fit gets the book's substitute (settingFilter.js). */
+export function resolvePersonalitySkills(personality, rng = Math.random, era = null) {
+  // A fixed skill with specialties ("Perform", "Etiquette", "Ride") gets one
+  // rolled, so it never lands on the sheet as a bare "Perform".
+  const names = new Set();
+  for (const ref of personality.skills) {
+    const name = resolveSkillDisplayName(ref, rng, era);
+    names.add(skillFits(name, era) ? name : substituteSkill(name, era, rng, names));
+  }
 
   for (const [choiceKey, base] of Object.entries(CRAFT_LIKE)) {
     const count = personality[choiceKey];
     if (!count) continue;
     for (let i = 0; i < count; i++) {
-      const display = resolveSkillDisplayName(`${base} (any)`, rng);
+      const display = resolveSkillDisplayName(`${base} (any)`, rng, era);
       if (display) names.add(display);
     }
   }
 
   if (personality.combatChoices) {
     const usedBases = new Set([...names].map(baseSkillName));
-    const pool = COMBAT_SKILL_NAMES.filter((n) => !usedBases.has(n));
+    const pool = COMBAT_SKILL_NAMES.filter((n) => !usedBases.has(n) && skillFits(n, era));
     for (let i = 0; i < personality.combatChoices && pool.length > 0; i++) {
       const idx = Math.floor(rng() * pool.length);
       const baseName = pool.splice(idx, 1)[0];
@@ -34,7 +43,7 @@ export function resolvePersonalitySkills(personality, rng = Math.random) {
       // specialty before they're usable; resolveSkillDisplayName rolls one
       // when the skill has a specialty system, and passes bare skills
       // (Brawl, Dodge, Grapple, Martial Arts) through unchanged.
-      const display = resolveSkillDisplayName(baseName, rng);
+      const display = resolveSkillDisplayName(baseName, rng, era);
       if (display) names.add(display);
     }
   }
@@ -46,13 +55,20 @@ export function resolvePersonalitySkills(personality, rng = Math.random) {
  * Manually resolve a personality package from the player's own picks,
  * instead of rolling them.
  * @param {object} personality one of PERSONALITY_TYPES
- * @param {{craftChoices?:string[], knowledgeChoices?:string[], technicalChoices?:string[], languageChoices?:string[], combatChoices?:string[]}} picks
+ * @param {{craftChoices?:string[], knowledgeChoices?:string[], technicalChoices?:string[], languageChoices?:string[], combatChoices?:string[], fixedSpecialties?:Record<string,string>}} picks
  *   already-concrete skill display names (e.g. "Craft (Carpentry)") for each
  *   choice category, and plain skill names (e.g. "Brawl") for combatChoices.
+ *   fixedSpecialties maps each fixed skill that needs a specialty to the
+ *   chosen one, e.g. { Perform: "Sing" }.
  * @returns {string[]} flat list of skill display names.
  */
 export function resolvePersonalitySkillsManual(personality, picks = {}) {
-  const names = new Set(personality.skills);
+  const names = new Set(personality.skills.map((ref) => {
+    if (!refNeedsSpecialtyChoice(ref)) return resolveSkillDisplayNameManual(ref, null);
+    const display = resolveSkillDisplayNameManual(ref, picks.fixedSpecialties?.[ref]);
+    if (!display) throw new Error(`${ref}: choose a specialty.`);
+    return display;
+  }));
 
   for (const [choiceKey, base] of Object.entries(CRAFT_LIKE)) {
     const required = personality[choiceKey] ?? 0;

@@ -5,6 +5,8 @@ import { CHARACTERISTICS } from "../js/engine/characteristics.js";
 import { PROFESSIONS } from "../js/data/professions.js";
 import { professionalSkillCap, personalSkillCap } from "../js/engine/skillPoints.js";
 import { skillTotal } from "../js/engine/skillSheet.js";
+import { refNeedsSpecialtyChoice } from "../js/engine/skillRef.js";
+import { SPECIALTY_ALIASES } from "../js/data/skills.js";
 
 test("generateRandomCharacter produces all seven characteristics", () => {
   const character = generateRandomCharacter();
@@ -118,4 +120,20 @@ test("defaultOptions returns a fully-populated, sensible baseline", () => {
   assert.equal(options.campaignPowerLevel, "Normal");
   assert.equal(options.profession, null);
   assert.equal(typeof options.usePersonality, "boolean");
+});
+
+test("generateRandomCharacter gives every character a name, and keeps a typed one", () => {
+  for (let i = 0; i < 20; i++) assert.match(generateRandomCharacter().name, /^\S+ \S+$/);
+  assert.equal(generateRandomCharacter({ name: "Ada Vance" }).name, "Ada Vance");
+});
+
+test("generateRandomCharacter writes every specialty skill with one specialty, and never two spellings of one skill", () => {
+  for (let i = 0; i < 200; i++) {
+    const options = { ...defaultOptions(), usePersonality: true, usePowers: i % 2 === 0 };
+    const names = Object.keys(generateRandomCharacter(options).skills);
+    for (const name of names) assert.ok(!refNeedsSpecialtyChoice(name), `"${name}" has no specialty`);
+    for (const [base, aliases] of Object.entries(SPECIALTY_ALIASES)) {
+      for (const variant of Object.keys(aliases)) assert.ok(!names.includes(`${base} (${variant})`), `${base} (${variant})`);
+    }
+  }
 });

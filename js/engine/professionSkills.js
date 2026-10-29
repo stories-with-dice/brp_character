@@ -1,6 +1,7 @@
 import { SKILLS } from "../data/skills.js";
-import { resolveSkillDisplayName, resolveSkillDisplayNameManual, refNeedsSpecialtyChoice } from "./skillRef.js";
+import { resolveSkillDisplayName, resolveSkillDisplayNameManual, refNeedsSpecialtyChoice, parseSkillRef } from "./skillRef.js";
 import { validateAllChoiceSelections } from "./professionChoices.js";
+import { skillFits, fittingSpecialties, substituteSkill } from "./settingFilter.js";
 
 /** Randomly pick `count` distinct items from `pool`, avoiding items already in `exclude`. */
 function pickRandomDistinct(pool, count, exclude, rng) {
@@ -14,29 +15,41 @@ function pickRandomDistinct(pool, count, exclude, rng) {
   return chosen;
 }
 
-/** If `name` is already taken, append a numeric suffix ("#2", "#3", ...)
- * until it isn't. Used so a skill picked more than once (e.g. "any two Art
- * skills" resolving to the same specialty twice, or a ref like "Language
- * (Other)" that can't be re-randomized at all) still results in the right
- * *count* of skills, instead of one silently vanishing as a "duplicate". */
+/** If `name` is already taken, number it inside the specialty: "Language
+ * (Other)" -> "Language (Other 2)", "Language (Other 3)", ... Used so a skill
+ * picked more than once (e.g. Entertainer's "choose 2" from just "Language
+ * (Other)", meaning two other languages) still results in the right *count*
+ * of skills, instead of one silently vanishing as a "duplicate". */
 function uniqueName(name, resolved) {
   if (!resolved.has(name)) return name;
+  const numbered = (n) => (/\)$/.test(name) ? name.replace(/\)$/, ` ${n})`) : `${name} ${n}`);
   let suffix = 2;
-  while (resolved.has(`${name} #${suffix}`)) suffix++;
-  return `${name} #${suffix}`;
+  while (resolved.has(numbered(suffix))) suffix++;
+  return numbered(suffix);
+}
+
+/** The refs of a choice pool that would only repeat a skill the profession
+ * already has, e.g. Teacher's pool lists "Persuade", which is also fixed. A
+ * ref with an open specialty ("Knowledge (any)") is never one: it rolls a new specialty. */
+function alreadyResolvedRefs(pool, resolved) {
+  return new Set(pool.filter((ref) => !refNeedsSpecialtyChoice(ref) && resolved.has(resolveSkillDisplayName(ref))));
 }
 
 /**
  * Resolve a profession's skill list (fixed + randomly-resolved "choose N of
  * the following" pools) into a flat list of concrete skill display names,
  * e.g. ["Dodge", "Hide", "Melee Weapon (Sword)", ...].
+ * With a setting `era` (settings.js ERAS), choice pools prefer the skills that
+ * fit it, and a skill that still does not fit gets the book's substitute
+ * (settingFilter.js substituteSkill): Soldier's "Firearm (Rifle)" in High
+ * Medieval becomes another Combat skill.
  */
-export function resolveProfessionSkills(profession, rng = Math.random) {
+export function resolveProfessionSkills(profession, rng = Math.random, era = null) {
   const resolved = new Set();
   const displayNames = [];
 
   const addRef = (ref) => {
-    let name = resolveSkillDisplayName(ref, rng);
+    let name = resolveSkillDisplayName(ref, rng, era);
     if (!name) return null;
     // Retry a few times to dodge an unlucky specialty collision (cheap and
     // usually unnecessary given how large most specialty pools are) before
@@ -47,9 +60,10 @@ export function resolveProfessionSkills(profession, rng = Math.random) {
     // (e.g. Artist's "choose 2" from just ["Art (any)"]).
     let attempts = 0;
     while (resolved.has(name) && attempts < 20) {
-      name = resolveSkillDisplayName(ref, rng);
+      name = resolveSkillDisplayName(ref, rng, era);
       attempts++;
     }
+    if (!skillFits(name, era)) name = substituteSkill(name, era, rng, resolved);
     name = uniqueName(name, resolved);
     resolved.add(name);
     displayNames.push(name);
@@ -60,7 +74,7 @@ export function resolveProfessionSkills(profession, rng = Math.random) {
 
   for (const choice of profession.choices ?? []) {
     if (choice.from.length === 1 && /^Any skill/i.test(choice.from[0])) {
-      const allSkillNames = SKILLS.map((s) => s.name).filter((n) => !resolved.has(n));
+      const allSkillNames = SKILLS.map((s) => s.name).filter((n) => !resolved.has(n) && skillFits(n, era));
       const picks = pickRandomDistinct(allSkillNames, choice.count, resolved, rng);
       for (const base of picks) addRef(base);
       continue;
@@ -68,8 +82,17 @@ export function resolveProfessionSkills(profession, rng = Math.random) {
     // Sample from choice.from; allow repeats when the pool has fewer
     // distinct refs than the required count -- e.g. Artist's "choose 2"
     // from ["Art (any)"] means two different Art specialties, not one.
+    // A pool with enough other refs never repeats a skill already resolved.
+    // A pool with enough skills of the setting's era picks only from those.
+    const repeats = alreadyResolvedRefs(choice.from, resolved);
+    const unfit = new Set(choice.from.filter((ref) => !skillFits(ref, era)));
+    const avoid = new Set([...repeats, ...unfit]);
     const picks =
-      choice.from.length >= choice.count
+      choice.from.length - avoid.size >= choice.count
+        ? pickRandomDistinct(choice.from, choice.count, avoid, rng)
+        : choice.from.length - repeats.size >= choice.count
+        ? pickRandomDistinct(choice.from, choice.count, repeats, rng)
+        : choice.from.length >= choice.count
         ? pickRandomDistinct(choice.from, choice.count, new Set(), rng)
         : Array.from({ length: choice.count }, () => choice.from[Math.floor(rng() * choice.from.length)]);
     for (const ref of picks) addRef(ref);
@@ -90,11 +113,16 @@ export function resolveProfessionSkills(profession, rng = Math.random) {
  * @param {Record<string,string>} specialtyChoices map of ref -> concrete
  *   specialty the player picked, for any fixed or chosen ref that says
  *   "(any)"/"(various)" (see refNeedsSpecialtyChoice).
+ * @param {{era?: number|null, substitutions?: Record<string,string>}} [setting]
+ *   the setting's era (settings.js ERAS), and for each ref whose skill does not
+ *   fit it, the player's substitute (one of settingFilter.js substituteOptions),
+ *   e.g. { "Firearm (Rifle)": "Missile Weapon (Crossbow)" }.
  * @returns {string[]} flat list of concrete skill display names.
  * @throws if choiceSelections don't match the profession's choice counts/pools,
- *   or a ref needing a specialty choice is missing one.
+ *   a ref needing a specialty choice is missing one, or a skill that does not
+ *   fit the setting has no fitting substitute.
  */
-export function resolveProfessionSkillsManual(profession, choiceSelections, specialtyChoices = {}) {
+export function resolveProfessionSkillsManual(profession, choiceSelections, specialtyChoices = {}, { era = null, substitutions = {} } = {}) {
   const errors = validateAllChoiceSelections(profession, choiceSelections);
   if (errors.length > 0) throw new Error(errors.join(" "));
 
@@ -102,10 +130,18 @@ export function resolveProfessionSkillsManual(profession, choiceSelections, spec
   const displayNames = [];
 
   const addRef = (ref) => {
-    let name = refNeedsSpecialtyChoice(ref)
-      ? resolveSkillDisplayNameManual(ref, specialtyChoices[ref])
-      : resolveSkillDisplayNameManual(ref, null);
+    const open = refNeedsSpecialtyChoice(ref);
+    // An open ref with no specialty of the setting's era ("Energy Weapon (any)"
+    // in High Medieval) goes straight to its substitute.
+    let name = open && era != null && !fittingSpecialties(parseSkillRef(ref).base, era).length
+      ? ref
+      : resolveSkillDisplayNameManual(ref, open ? specialtyChoices[ref] : null);
     if (!name) throw new Error(`Missing specialty choice for "${ref}".`);
+    if (!skillFits(name, era)) {
+      const sub = substitutions[ref];
+      if (!sub || !skillFits(sub, era)) throw new Error(`"${name}" does not fit this setting: choose a substitute.`);
+      name = sub;
+    }
     name = uniqueName(name, resolved);
     resolved.add(name);
     displayNames.push(name);

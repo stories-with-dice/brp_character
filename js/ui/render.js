@@ -1,4 +1,6 @@
 import { skillTotal } from "../engine/skillSheet.js";
+import { findSetting } from "../data/settings.js";
+import { describePower, describePowerSet } from "../engine/powersEngine.js";
 import { SKILL_CATEGORIES } from "../data/skills.js";
 
 const ROLL_LABELS = { STR: "Effort", CON: "Stamina", INT: "Idea", POW: "Luck", DEX: "Agility", CHA: "Charm", EDU: "Knowledge" };
@@ -71,6 +73,8 @@ function summaryCard(character) {
     ["Gender", character.gender || "-"],
   ];
   if (character.personality) rows.push(["Personality", character.personality.name]);
+  const setting = findSetting(character.options?.setting);
+  if (setting.era != null) rows.push(["Setting", setting.name]);
   const card = el("div", { class: "card" }, [
     el("h3", { text: "Summary" }),
     el(
@@ -103,20 +107,19 @@ function featuresCard(character) {
 
 function powersCard(character) {
   if (!character.powers) return null;
-  const list = el(
-    "ul",
-    { class: "powers-list" },
-    character.powers.sets.map((s) =>
-      el("li", { text: `${s.name} (${s.level} power level, resists via ${s.resistance})` })
-    )
-  );
+  const sets = character.powers.sets.map((s) => {
+    const items = [
+      ...(s.powers ?? []).map((p) => el("li", { text: describePower(s.type, p) })),
+      ...(s.extras ?? []).map((extra) => el("li", { text: extra })),
+    ];
+    return el("div", { class: "power-set" }, [
+      el("h4", { text: `${describePowerSet(s)}, resists via ${s.resistance}` }),
+      el("ul", { class: "powers-list" }, items),
+    ]);
+  });
   return el("div", { class: "card" }, [
     el("h3", { text: `Powers -- ${character.powers.powerPoints} Power Points` }),
-    list,
-    el("p", {
-      text: "Groundwork only: specific spells/mutations/talents are not generated and can be filled in during play.",
-      style: "color:var(--text-dim); font-size:0.8rem; margin-top:6px;",
-    }),
+    ...sets,
   ]);
 }
 

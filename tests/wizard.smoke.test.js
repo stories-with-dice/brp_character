@@ -73,6 +73,7 @@ function runWizardToCompletion({ maxSteps = 10 } = {}) {
 
 function resetSettingsToDefaults() {
   setSelectValue("opt-campaign-level", "Normal");
+  setSelectValue("opt-setting", "any");
   setSelectValue("opt-char-method", "standard");
   setSelectValue("opt-profession", "");
   $("opt-age").value = "";
@@ -142,6 +143,65 @@ test("full wizard run with every optional rule enabled reaches Finish without er
   assert.match(text, /Fatigue Points/);
   assert.match(text, /Sanity Points/);
   assert.match(text, /Hit Points by Location/);
+});
+
+test("Setting: High Medieval limits the profession list and offers a substitute for a misfit skill", () => {
+  setSelectValue("opt-setting", "high-medieval");
+  const quick = [...$("opt-profession").options].map((o) => o.value);
+  assert.ok(!quick.includes("Journalist") && quick.includes("Soldier"), "the Quick Random profession list follows the setting");
+  $("btn-start-wizard").click();
+  for (let i = 0; i < 10 && !$("wizard-step-title").textContent.includes("Profession"); i++) randomizeThenNext();
+  const select = [...document.querySelectorAll("#wizard-step-body select")].find((s) => [...s.options].some((o) => o.value === "Soldier"));
+  assert.ok(![...select.options].some((o) => o.value === "Journalist"));
+  select.value = "Soldier";
+  select.dispatchEvent(new window.Event("change"));
+  const rifle = [...document.querySelectorAll("#wizard-step-body label")].find((l) => l.textContent.includes("Firearm (Rifle)"));
+  assert.match(rifle.textContent, /not in this setting/);
+  rifle.querySelector("input").click();
+  assert.match($("wizard-step-body").textContent, /Firearm \(Rifle\) →/);
+  runWizardToCompletion();
+  const text = $("character-sheet").textContent;
+  assert.match(text, /High Medieval/);
+  assert.doesNotMatch(text, /Firearm|Energy Weapon|Psychotherapy/);
+});
+
+test("Setting: a fully randomized wizard run finishes in every setting, every rule on", () => {
+  for (const id of [...$("opt-setting").options].map((o) => o.value)) {
+    setSelectValue("opt-setting", id);
+    setChecked("opt-powers", true);
+    setChecked("opt-edu", true);
+    setChecked("opt-sanity", true);
+    $("btn-start-wizard").click();
+    runWizardToCompletion({ maxSteps: 12 });
+    assert.equal($("sheet-panel").hidden, false, id);
+    assert.equal($("wizard-panel").hidden, true, id);
+    if (id === "prehistoric") assert.doesNotMatch($("character-sheet").textContent, /Firearm|Energy Weapon|Literacy|Psychotherapy|Starship/);
+  }
+});
+
+test("powers step pre-fills valid starting powers for every power type", () => {
+  setChecked("opt-powers", true);
+  setSelectValue("opt-campaign-level", "Heroic");
+  $("btn-start-wizard").click();
+  randomizeThenNext(); // characteristics
+  assert.match($("wizard-step-title").textContent, /Powers/);
+
+  const typeSelect = () => $("wizard-step-body").querySelector("select");
+  const ids = [...typeSelect().options].filter((o) => !o.disabled).map((o) => o.value);
+  assert.ok(ids.length >= 4);
+  for (const id of ids) {
+    const select = typeSelect();
+    select.value = id;
+    select.dispatchEvent(new window.Event("change"));
+    $("btn-wizard-next").click();
+    assert.equal($("wizard-error").hidden, true, `${id}: ${$("wizard-error").textContent}`);
+    assert.match($("wizard-step-title").textContent, /Age/, id);
+    $("btn-wizard-back").click();
+  }
+
+  runWizardToCompletion();
+  const text = $("character-sheet").textContent;
+  assert.match(text, /Powers -- \d+ Power Points/);
 });
 
 test("full wizard run with the 'Choosing Characteristic Values' method completes", () => {

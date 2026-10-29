@@ -63,9 +63,17 @@ test("resolveProfessionSkills gives Artist two distinct Art specialties from its
 test("resolveProfessionSkills disambiguates Entertainer's repeated 'Language (Other)' pick instead of dropping it", () => {
   const entertainer = findProfession("Entertainer");
   const names = resolveProfessionSkills(entertainer);
-  const languageSkills = names.filter((n) => n.startsWith("Language (Other)"));
-  assert.equal(languageSkills.length, 2);
-  assert.equal(new Set(languageSkills).size, 2); // must be distinguishable, not identical
+  const languageSkills = names.filter((n) => n.startsWith("Language (Other"));
+  assert.deepEqual(languageSkills, ["Language (Other)", "Language (Other 2)"]); // distinguishable, numbered inside the specialty
+});
+
+test("resolveProfessionSkills never repeats a skill the profession already has when its pool has other options (Teacher, Computer Tech)", () => {
+  for (let i = 0; i < 300; i++) {
+    for (const name of ["Teacher", "Computer Tech"]) {
+      const names = resolveProfessionSkills(findProfession(name));
+      assert.ok(!names.some((n) => / \d\)?$/.test(n)), `${name}: ${names.join(", ")}`);
+    }
+  }
 });
 
 test("allocatePointsRandomly never exceeds a slot's headroom", () => {

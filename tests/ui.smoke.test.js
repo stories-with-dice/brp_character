@@ -108,3 +108,14 @@ test("JSON and Markdown export buttons don't crash the page when clicked", () =>
   assert.doesNotThrow(() => document.getElementById("btn-export-json").click());
   assert.doesNotThrow(() => document.getElementById("btn-export-md").click());
 });
+
+test("Copy Markdown button reports the copy result on the button", async () => {
+  // jsdom has no Clipboard API and no execCommand("copy"), so the copy fails
+  // here; a real browser copies. This checks the click handler runs and
+  // shows its feedback without throwing.
+  document.getElementById("btn-generate").click();
+  const button = document.getElementById("btn-copy-md");
+  button.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.match(button.textContent, /Copied|Copy failed/);
+});
